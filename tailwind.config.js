@@ -7,6 +7,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        dark: {
+          900: '#0a0a0f',
+          800: '#13131a',
+          700: '#1a1a24',
+        },
+        neon: {
+          purple: '#a855f7',
+          cyan: '#06b6d4',
+          pink: '#ec4899',
+        },
         primary: {
           50: '#f5f3ff',
           100: '#ede9fe',
@@ -22,7 +32,12 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-cosmic': 'linear-gradient(to bottom, #0a0a0f, #1a1a24, #2d1b69)',
+        'gradient-aurora': 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
       },
     },
   },

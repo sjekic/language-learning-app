@@ -4,21 +4,42 @@ import { Sparkles } from 'lucide-react';
 
 export const AuthLayout: React.FC = () => {
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="flex justify-center text-primary-600 mb-6">
-                    <div className="bg-primary-100 p-3 rounded-xl">
-                        <Sparkles className="w-8 h-8" />
-                    </div>
-                </div>
-                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-                    StoryAI
-                </h2>
+        <div className="min-h-screen bg-dark-900 relative overflow-hidden flex items-center justify-center p-4">
+            {/* Cosmic Gradient Background */}
+            <div className="absolute inset-0 bg-gradient-cosmic" />
+
+            {/* Animated Glowing Spheres - 3D Orbital Effect */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {/* Large Main Sphere */}
+                <div className="absolute w-96 h-96 rounded-full gradient-sphere blur-3xl opacity-40 animate-pulse-glow" />
+
+                {/* Orbital Ring */}
+                <div className="absolute w-[500px] h-[500px] rounded-full border border-neon-purple/20" />
+                <div className="absolute w-[450px] h-[450px] rounded-full border border-neon-cyan/10 animate-spin" style={{ animationDuration: '30s' }} />
+
+                {/* Small Orbiting Particles */}
+                <div className="absolute w-4 h-4 rounded-full bg-neon-purple glow-purple animate-orbit" />
+                <div className="absolute w-3 h-3 rounded-full bg-neon-cyan glow-cyan animate-orbit" style={{ animationDelay: '5s', animationDuration: '15s' }} />
+                <div className="absolute w-2 h-2 rounded-full bg-neon-pink animate-orbit" style={{ animationDelay: '10s', animationDuration: '25s' }} />
             </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow-xl shadow-gray-200/50 sm:rounded-2xl sm:px-10 border border-gray-100">
-                    <Outlet />
+            {/* Logo/Brand */}
+            <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+                <div className="bg-neon-purple/10 p-2 rounded-lg backdrop-blur-sm border border-neon-purple/20">
+                    <Sparkles className="w-6 h-6 text-neon-purple" />
+                </div>
+                <h1 className="text-2xl font-bold text-white">StoryAI</h1>
+            </div>
+
+            {/* Auth Content */}
+            <div className="relative z-10 w-full max-w-md">
+                <div className="glass-dark rounded-3xl p-8 sm:p-10 relative overflow-hidden">
+                    {/* Inner Glow */}
+                    <div className="absolute inset-0 bg-gradient-radial from-neon-purple/5 to-transparent opacity-50" />
+
+                    <div className="relative z-10">
+                        <Outlet />
+                    </div>
                 </div>
             </div>
         </div>

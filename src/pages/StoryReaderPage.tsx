@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
-import { Button } from '../components/Button';
 import { StoryPage } from '../components/StoryPage';
 import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
 
@@ -24,7 +23,7 @@ export const StoryReaderPage: React.FC = () => {
     // Redirect if no story data
     React.useEffect(() => {
         if (!state?.story) {
-            navigate('/generate');
+            navigate('/library');
         }
     }, [state, navigate]);
 
@@ -48,45 +47,55 @@ export const StoryReaderPage: React.FC = () => {
     };
 
     return (
-        <div className="max-w-3xl mx-auto py-8 space-y-8">
-            <div className="flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => navigate('/generate')}>
-                    <Home className="w-4 h-4 mr-2" />
-                    Back to Generator
-                </Button>
-                <h2 className="font-semibold text-gray-900 truncate max-w-[200px] sm:max-w-md">
-                    {state.title}
-                </h2>
-                <div className="w-24" /> {/* Spacer for alignment */}
-            </div>
+        <div className="min-h-screen bg-dark-900 py-8 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto space-y-8">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <button
+                        onClick={() => navigate('/library')}
+                        className="flex items-center gap-2 px-4 py-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                    >
+                        <Home className="w-4 h-4" />
+                        <span className="text-sm">Back to Library</span>
+                    </button>
+                    <h2 className="font-semibold text-white truncate max-w-[200px] sm:max-w-md text-center">
+                        {state.title}
+                    </h2>
+                    <div className="w-24" /> {/* Spacer for alignment */}
+                </div>
 
-            <StoryPage
-                content={currentContent}
-                pageNumber={currentPage + 1}
-                totalPages={totalPages}
-                onWordHover={addHoveredWord}
-            />
+                {/* Story Content */}
+                <StoryPage
+                    content={currentContent}
+                    pageNumber={currentPage + 1}
+                    totalPages={totalPages}
+                    onWordHover={addHoveredWord}
+                />
 
-            <div className="flex items-center justify-between">
-                <Button
-                    variant="secondary"
-                    onClick={handlePrev}
-                    disabled={currentPage === 0}
-                    className="w-32"
-                >
-                    <ChevronLeft className="w-4 h-4 mr-2" />
-                    Previous
-                </Button>
+                {/* Navigation */}
+                <div className="flex items-center justify-between">
+                    <button
+                        onClick={handlePrev}
+                        disabled={currentPage === 0}
+                        className="w-32 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                    </button>
 
-                <Button
-                    variant="primary"
-                    onClick={handleNext}
-                    disabled={currentPage === totalPages - 1}
-                    className="w-32"
-                >
-                    {currentPage === totalPages - 1 ? 'Finish' : 'Next'}
-                    {currentPage !== totalPages - 1 && <ChevronRight className="w-4 h-4 ml-2" />}
-                </Button>
+                    <button
+                        onClick={handleNext}
+                        disabled={currentPage === totalPages - 1}
+                        className="w-32 relative group overflow-hidden rounded-xl bg-gradient-to-r from-neon-purple to-neon-cyan p-[2px] transition-all hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                        <div className="relative bg-dark-900 rounded-[10px] px-4 py-2.5 flex items-center justify-center gap-2 group-hover:bg-transparent transition-all">
+                            <span className="font-medium text-white">
+                                {currentPage === totalPages - 1 ? 'Finish' : 'Next'}
+                            </span>
+                            {currentPage !== totalPages - 1 && <ChevronRight className="w-4 h-4" />}
+                        </div>
+                    </button>
+                </div>
             </div>
         </div>
     );

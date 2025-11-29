@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { StoryGeneratorPage } from './pages/StoryGeneratorPage';
 import { StoryReaderPage } from './pages/StoryReaderPage';
+import { StoryLibraryPage } from './pages/StoryLibraryPage';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         {/* App Routes */}
         <Route element={<Layout />}>
           <Route path="/generate" element={<StoryGeneratorPage />} />
+          <Route path="/library" element={<StoryLibraryPage />} />
           <Route path="/read" element={<StoryReaderPage />} />
         </Route>
 

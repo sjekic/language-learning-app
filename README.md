@@ -1,73 +1,109 @@
-# React + TypeScript + Vite
+# Language Learning App - UI Only
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A beautiful, interactive language learning story generator built with React, TypeScript, and Tailwind CSS.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 📚 **Story Generator** - Create custom stories based on language level (A1-C1), genre, and custom prompts
+- 🎯 **Interactive Reading** - Read stories page-by-page with smooth navigation
+- 📝 **Vocabulary Tracker** - Hover over words to collect them in your personal vocabulary list
+- 🎨 **Modern UI** - Clean, responsive design with smooth animations
+- 🌍 **Multiple Languages** - Support for English, Spanish, French, German, Italian, Japanese, and Chinese
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React 19, TypeScript
+- **Routing**: React Router v7
+- **Styling**: Tailwind CSS 4
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **Build Tool**: Vite
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Node.js 20.19+ or 22.12+
+- npm or yarn
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Installation
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Clone the repository:
+```bash
+git clone <your-repo-url>
+cd language-learning-app
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. Install dependencies:
+```bash
+npm install
 ```
+
+3. Start the development server:
+```bash
+npm run dev
+```
+
+4. Open your browser to `http://localhost:5173`
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## Project Structure
+
+```
+src/
+├── components/     # Reusable UI components
+├── layouts/        # Layout components (Auth, Main)
+├── pages/          # Page components
+├── lib/            # Utility functions
+└── assets/         # Static assets
+```
+
+## Features in Detail
+
+### Story Generation
+- Select target language and CEFR level (A1-C1)
+- Choose from multiple genres (Fantasy, Sci-Fi, Adventure, Mystery, Slice of Life)
+- Write custom prompts to guide story creation
+- Generates 10-page stories (currently using mock data)
+
+### Interactive Reading
+- Page-by-page navigation
+- Hover over any word to add it to your vocabulary
+- Clean, distraction-free reading experience
+- Responsive design for all devices
+
+### Vocabulary Collection
+- Automatically collects words you hover over
+- Displays in a sidebar vocabulary list
+- Removes punctuation for cleaner word storage
+
+## Current Limitations
+
+- **Mock AI**: Stories are currently generated using mock data, not real AI
+- **No Persistence**: Data is stored in browser memory only (cleared on refresh)
+- **No Authentication**: Login/signup pages are UI-only mockups
+- **No Translations**: Vocabulary sidebar doesn't provide translations yet
+
+## Future Enhancements
+
+- Real AI story generation (OpenAI, Anthropic, Google Gemini)
+- User authentication and profiles
+- Data persistence (database integration)
+- Word translations and definitions
+- Audio narration
+- Comprehension quizzes
+- Progress tracking and analytics
+
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
