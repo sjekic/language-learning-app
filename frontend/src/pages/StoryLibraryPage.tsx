@@ -182,22 +182,19 @@ export const StoryLibraryPage: React.FC = () => {
                                 {/* Gradient Overlay */}
                                 <div className="absolute inset-0 story-overlay" />
 
-                                {/* Glow Effect on Hover */}
-                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity glow-purple" />
+                                {/* Delete Button - Always Visible */}
+                                <div className="absolute top-2 right-2 z-20">
+                                    <button
+                                        onClick={(e) => handleDeleteStory(story.id, e)}
+                                        className="p-2 bg-red-600/90 backdrop-blur rounded-full text-white hover:bg-red-500 transition-all shadow-lg hover:scale-110"
+                                        aria-label="Delete story"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
 
                                 {/* Content */}
-                                <div className="absolute inset-0 p-4 flex flex-col justify-between">
-                                    {/* Delete Button */}
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={(e) => handleDeleteStory(story.id, e)}
-                                            className="opacity-0 group-hover:opacity-100 p-2 bg-black/50 backdrop-blur rounded-full text-white hover:bg-red-500/50 transition-all"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-
-                                    {/* Bottom Info */}
+                                <div className="absolute inset-0 p-4 flex flex-col justify-end">
                                     <div>
                                         {/* Title */}
                                         <h3 className="text-white font-bold text-lg sm:text-xl mb-3 line-clamp-2 drop-shadow-lg">
@@ -220,7 +217,7 @@ export const StoryLibraryPage: React.FC = () => {
                                 </div>
 
                                 {/* Play Icon on Hover */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                     <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
                                         <div className="w-0 h-0 border-l-[20px] border-l-white border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent ml-1" />
                                     </div>
