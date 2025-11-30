@@ -10,7 +10,7 @@ export const StoryGeneratorPage: React.FC = () => {
     const [formData, setFormData] = useState({
         level: 'B1',
         genre: 'fantasy',
-        language: 'English',
+        language: 'Spanish',
         prompt: '',
     });
 
@@ -78,7 +78,6 @@ export const StoryGeneratorPage: React.FC = () => {
                                     value={formData.language}
                                     onChange={handleChange}
                                     options={[
-                                        { value: 'English', label: 'English' },
                                         { value: 'Spanish', label: 'Spanish' },
                                         { value: 'French', label: 'French' },
                                         { value: 'German', label: 'German' },
