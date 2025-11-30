@@ -29,8 +29,10 @@ app.get('/api/translate', async (req, res) => {
         }
 
         // Call Linguee API
-        // Using the public Linguee API proxy mentioned in the user request
-        const response = await axios.get('https://linguee-api.fly.dev/api/v2/translations', {
+        const apiUrl = 'https://linguee-api.fly.dev/api/v2/translations';
+        console.log(`Forwarding to: ${apiUrl}?query=${query}&src=${src}&dst=${dst}`);
+
+        const response = await axios.get(apiUrl, {
             params: {
                 query,
                 src,
@@ -38,6 +40,9 @@ app.get('/api/translate', async (req, res) => {
                 guess_direction: false
             }
         });
+
+        console.log('Linguee API Response Status:', response.status);
+        console.log('Linguee API Response Data:', JSON.stringify(response.data).substring(0, 200) + '...'); // Log first 200 chars
 
         // Store in cache
         translationCache.set(cacheKey, response.data);

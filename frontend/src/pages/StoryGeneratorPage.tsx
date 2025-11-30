@@ -25,22 +25,43 @@ export const StoryGeneratorPage: React.FC = () => {
         // Mock AI Generation
         setTimeout(() => {
             setIsLoading(false);
+
+            // Simple mock stories in different languages
+            const getMockContent = (lang: string, page: number) => {
+                switch (lang) {
+                    case 'Spanish':
+                        return `Esta es la página ${page} de la historia. El héroe caminó por el mundo misterioso buscando pistas. ¡De repente, apareció una criatura extraña! Fue un momento de verdad. El viento aullaba y el cielo se volvió morado. "¿Qué está pasando?", preguntó el héroe.`;
+                    case 'French':
+                        return `Ceci est la page ${page} de l'histoire. Le héros marchait à travers le monde mystérieux à la recherche d'indices. Soudain, une créature étrange est apparue ! C'était un moment de vérité. Le vent hurlait et le ciel devenait violet. "Que se passe-t-il ?", demanda le héros.`;
+                    case 'German':
+                        return `Dies ist Seite ${page} der Geschichte. Der Held ging auf der Suche nach Hinweisen durch die geheimnisvolle Welt. Plötzlich tauchte eine seltsame Kreatur auf! Es war ein Moment der Wahrheit. Der Wind heulte und der Himmel färbte sich lila. "Was passiert hier?", fragte der Held.`;
+                    case 'Italian':
+                        return `Questa è la pagina ${page} della storia. L'eroe camminava attraverso il mondo misterioso in cerca di indizi. Improvvisamente, apparve una strana creatura! Era un momento della verità. Il vento ululava e il cielo diventava viola. "Cosa sta succedendo?", chiese l'eroe.`;
+                    case 'Japanese':
+                        return `これは物語の${page}ページ目です。主人公は手がかりを探して不思議な世界を歩いていました。突然、奇妙な生き物が現れました！それは真実の瞬間でした。風が吠え、空は紫色に変わりました。「何が起きているんだ？」と主人公は尋ねました。`;
+                    case 'Chinese':
+                        return `这是故事的第 ${page} 页。英雄走过神秘的世界寻找线索。突然，一个奇怪的生物出现了！这是真相大白的时刻。风在呼啸，天空变成了紫色。“发生什么事了？”英雄问道。`;
+                    default: // Fallback to Spanish as per default
+                        return `Esta es la página ${page} de la historia. El héroe caminó por el mundo misterioso buscando pistas. ¡De repente, apareció una criatura extraña! Fue un momento de verdad. El viento aullaba y el cielo se volvió morado. "¿Qué está pasando?", preguntó el héroe.`;
+                }
+            };
+
             // Mock story data
             const mockStory = Array.from({ length: 10 }, (_, i) => ({
                 id: i + 1,
-                content: `This is page ${i + 1} of the story about ${formData.prompt || 'a mysterious adventure'} in ${formData.language}. The hero walked through the ${formData.genre} world, looking for clues. Suddenly, a strange creature appeared! It was a moment of truth. The wind howled, and the sky turned purple. "What is happening?" asked the hero.`,
+                content: getMockContent(formData.language, i + 1),
             }));
 
             // Save to localStorage
             saveStory({
-                title: formData.prompt || 'My AI Story',
+                title: formData.prompt || `My ${formData.language} Story`,
                 language: formData.language,
                 level: formData.level,
                 genre: formData.genre,
                 pages: mockStory,
             });
 
-            navigate('/read', { state: { story: mockStory, title: formData.prompt || 'My AI Story' } });
+            navigate('/read', { state: { story: mockStory, title: formData.prompt || `My ${formData.language} Story` } });
         }, 2000);
     };
 
