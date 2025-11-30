@@ -38,6 +38,7 @@ export const StoryLibraryPage: React.FC = () => {
             state: {
                 story: story.pages,
                 title: story.title,
+                language: story.language,
                 fromLibrary: true
             }
         });
@@ -73,6 +74,8 @@ export const StoryLibraryPage: React.FC = () => {
 
     const hasActiveFilters = selectedLevel || selectedGenre || selectedLanguage;
 
+
+
     if (stories.length === 0) {
         return (
             <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
@@ -84,15 +87,18 @@ export const StoryLibraryPage: React.FC = () => {
                     <p className="text-gray-400 mb-8">
                         Generate your first immersive language story to get started
                     </p>
-                    <button
-                        onClick={() => navigate('/generate')}
-                        className="relative group overflow-hidden rounded-xl bg-gradient-to-r from-neon-purple to-neon-cyan p-[2px] transition-all hover:scale-105"
-                    >
-                        <div className="relative bg-dark-900 rounded-[10px] px-6 py-3 flex items-center gap-2 group-hover:bg-transparent transition-all">
-                            <Sparkles className="w-5 h-5 text-white" />
-                            <span className="font-semibold text-white">Create Story</span>
-                        </div>
-                    </button>
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={() => navigate('/generate')}
+                            className="relative group overflow-hidden rounded-xl bg-gradient-to-r from-neon-purple to-neon-cyan p-[2px] transition-all hover:scale-105"
+                        >
+                            <div className="relative bg-dark-900 rounded-[10px] px-6 py-3 flex items-center justify-center gap-2 group-hover:bg-transparent transition-all">
+                                <Sparkles className="w-5 h-5 text-white" />
+                                <span className="font-semibold text-white">Create Story</span>
+                            </div>
+                        </button>
+
+                    </div>
                 </div>
             </div>
         );
@@ -109,6 +115,8 @@ export const StoryLibraryPage: React.FC = () => {
                             {filteredStories.length} {filteredStories.length === 1 ? 'story' : 'stories'} found
                         </p>
                     </div>
+
+
 
                     {/* Filters */}
                     <div className="flex flex-wrap items-center gap-3">

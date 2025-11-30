@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
 interface StoryState {
     story: { id: number; content: string }[];
     title: string;
+    language: string;
 }
 
 interface LayoutContext {
@@ -69,6 +70,7 @@ export const StoryReaderPage: React.FC = () => {
                     content={currentContent}
                     pageNumber={currentPage + 1}
                     totalPages={totalPages}
+                    language={state.language}
                     onWordHover={addHoveredWord}
                 />
 

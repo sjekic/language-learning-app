@@ -1,24 +1,60 @@
 import React from 'react';
 
+import { translateWord } from '../lib/linguee';
+
 interface StoryPageProps {
     content: string;
     pageNumber: number;
     totalPages: number;
+    language: string;
     onWordHover: (word: string) => void;
 }
 
-export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, totalPages, onWordHover }) => {
+export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, totalPages, language, onWordHover }) => {
     // Split content into words to enable individual hover
     const words = content.split(' ');
     const [hoveredWord, setHoveredWord] = React.useState<{ word: string; index: number } | null>(null);
+    const [translation, setTranslation] = React.useState<string | null>(null);
+    const [loading, setLoading] = React.useState(false);
 
-    // Mock translation function (in real app, this would call an API)
-    const getTranslation = (word: string) => {
-        // Strip punctuation for better translation
-        const cleanWord = word.replace(/[.,!?\"]/g, '');
-        // Mock translations (you'd replace this with actual API call)
-        return `Translation of "${cleanWord}"`;
-    };
+    React.useEffect(() => {
+        let isMounted = true;
+
+        const fetchTranslation = async () => {
+            if (!hoveredWord) {
+                setTranslation(null);
+                return;
+            }
+
+            setLoading(true);
+            // Strip punctuation for better translation
+            const cleanWord = hoveredWord.word.replace(/[.,!?\"]/g, '');
+
+            try {
+                const results = await translateWord(cleanWord, language, 'English');
+                if (isMounted) {
+                    if (results.length > 0) {
+                        // Format: "Translation (Part of Speech)"
+                        setTranslation(`${results[0].text} (${results[0].pos})`);
+                    } else {
+                        setTranslation('No translation found');
+                    }
+                }
+            } catch (error) {
+                if (isMounted) setTranslation('Error translating');
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        // Debounce translation requests
+        const timeoutId = setTimeout(fetchTranslation, 300);
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
+    }, [hoveredWord, language]);
 
     const handleWordClick = (word: string) => {
         const cleanWord = word.replace(/[.,!?\"]/g, '');
@@ -44,7 +80,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                             {/* Translation Tooltip */}
                             {hoveredWord?.index === index && (
                                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm text-neon-purple whitespace-nowrap z-50 shadow-lg backdrop-blur-xl">
-                                    {getTranslation(word)}
+                                    {loading ? 'Translating...' : translation}
                                     <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-dark-800"></span>
                                 </span>
                             )}
