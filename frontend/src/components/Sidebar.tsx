@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
-import { BookOpen, ChevronRight, Sparkles, Library } from 'lucide-react';
+import { BookOpen, ChevronRight, Sparkles, Library, BookMarked } from 'lucide-react';
 import { WordPill } from './WordPill';
 
 interface SidebarProps {
@@ -17,6 +17,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, hoveredWord
     const menuItems = [
         { icon: Library, label: 'Library', path: '/library' },
         { icon: Sparkles, label: 'Create Story', path: '/generate' },
+        { icon: BookMarked, label: 'Vocabulary', path: '/vocabulary' },
     ];
 
     return (
