@@ -1,21 +1,28 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { login } from '../lib/auth';
 
 export const LoginPage: React.FC = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = React.useState(false);
     const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
+    const [error, setError] = React.useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // Mock login
-        setTimeout(() => {
-            setIsLoading(false);
+        setError('');
+        
+        try {
+            await login(email, password);
             navigate('/library');
-        }, 1000);
+        } catch (err: any) {
+            setError(err.message || 'Failed to sign in. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -32,6 +39,13 @@ export const LoginPage: React.FC = () => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Error Message */}
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-sm text-red-400">
+                        {error}
+                    </div>
+                )}
+
                 {/* Email Input */}
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-300">
