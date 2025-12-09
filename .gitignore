@@ -103,3 +103,7 @@ docker-compose.override.yml
 *.crt
 secrets/
 credentials/
+
+# Firebase service account keys (NEVER commit these!)
+**/firebase-service-account*.json
+firebase-service-account*.json
