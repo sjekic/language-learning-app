@@ -153,7 +153,9 @@ async def verify_and_sync_user(request: FirebaseAuthRequest):
     """
     try:
         # Verify Firebase token
+        print(f"🔍 Attempting to verify token (first 20 chars): {request.id_token[:20]}...")
         decoded_token = verify_firebase_token(request.id_token)
+        print(f"✅ Token verified successfully for user: {decoded_token.get('email')}")
         
         firebase_uid = decoded_token['uid']
         email = decoded_token.get('email')
@@ -181,6 +183,7 @@ async def verify_and_sync_user(request: FirebaseAuthRequest):
         )
         
     except ValueError as e:
+        print(f"❌ Token verification failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)
@@ -188,6 +191,7 @@ async def verify_and_sync_user(request: FirebaseAuthRequest):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ Unexpected error in verify_and_sync_user: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to verify user: {str(e)}"
