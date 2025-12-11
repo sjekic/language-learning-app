@@ -3,6 +3,7 @@ import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { saveWord, isWordSaved } from '../lib/vocabulary';
 
 import { translate } from '../lib/translation';
+import type { TranslationResponse } from '../lib/translation';
 
 interface StoryPageProps {
     content: string;
@@ -17,7 +18,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const words = content.split(' ');
     const [hoveredWord, setHoveredWord] = React.useState<{ word: string; index: number } | null>(null);
     const [translation, setTranslation] = React.useState<string | null>(null);
-    const [translationDetails, setTranslationDetails] = React.useState<{ text: string; pos: string } | null>(null);
+    const [translationDetails, setTranslationDetails] = React.useState<TranslationResponse | null>(null);
     const [loading, setLoading] = React.useState(false);
     const [savedWords, setSavedWords] = React.useState<Set<string>>(new Set());
 
@@ -36,13 +37,14 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
 
             try {
                 // Default to translating to English for now, can be made dynamic
-                const response = await translate(cleanWord, language, 'EN');
+                const response = await translate(cleanWord, language, 'en');
 
                 if (isMounted) {
                     if (response.translations && response.translations.length > 0) {
-                        // Format: "Translation (Part of Speech)"
-                        const firstMatch = response.translations[0];
-                        setTranslation(`${firstMatch.text} (${firstMatch.pos})`);
+                        // Backend returns array of strings
+                        const firstTranslation = response.translations[0];
+                        setTranslation(firstTranslation);
+                        setTranslationDetails(response);
                     } else {
                         setTranslation('No translation found');
                         setTranslationDetails(null);
@@ -72,8 +74,8 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
 
         saveWord({
             word: cleanWord,
-            translation: translationDetails.text,
-            partOfSpeech: translationDetails.pos,
+            translation: translationDetails.translations[0] || 'N/A',
+            partOfSpeech: 'N/A', // Backend doesn't provide part of speech
             sourceLanguage: language,
             targetLanguage: 'English',
             context: content,
@@ -107,7 +109,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                             {/* Translation Tooltip */}
                             {hoveredWord?.index === index && (
                                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm z-50 shadow-lg backdrop-blur-xl min-w-[200px]">
-                                    <div className="flex items-center justify-between gap-3">
+                                    <span className="flex items-center justify-between gap-3">
                                         <span className="text-neon-purple">
                                             {loading ? 'Translating...' : translation}
                                         </span>
@@ -127,7 +129,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                                                 )}
                                             </button>
                                         )}
-                                    </div>
+                                    </span>
                                     <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-dark-800"></span>
                                 </span>
                             )}

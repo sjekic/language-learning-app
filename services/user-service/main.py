@@ -77,7 +77,7 @@ async def verify_token(authorization: str = Header(...)) -> dict:
         # Verify with auth service
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{AUTH_SERVICE_URL}/api/auth/verify",
+                f"{AUTH_SERVICE_URL}/api/auth/token/verify",
                 headers={"Authorization": f"Bearer {token}"}
             )
             

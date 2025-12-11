@@ -8,6 +8,18 @@ import { StoryGeneratorPage } from './pages/StoryGeneratorPage';
 import { StoryReaderPage } from './pages/StoryReaderPage';
 import { StoryLibraryPage } from './pages/StoryLibraryPage';
 import { VocabularyPage } from './pages/VocabularyPage';
+import { useAuth } from './lib/AuthContext';
+
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAuth();
+  
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+}
 
 function App() {
   return (
@@ -19,12 +31,12 @@ function App() {
           <Route path="/signup" element={<SignupPage />} />
         </Route>
 
-        {/* App Routes */}
+        {/* App Routes - Protected */}
         <Route element={<Layout />}>
-          <Route path="/generate" element={<StoryGeneratorPage />} />
-          <Route path="/library" element={<StoryLibraryPage />} />
-          <Route path="/read" element={<StoryReaderPage />} />
-          <Route path="/vocabulary" element={<VocabularyPage />} />
+          <Route path="/generate" element={<ProtectedRoute><StoryGeneratorPage /></ProtectedRoute>} />
+          <Route path="/library" element={<ProtectedRoute><StoryLibraryPage /></ProtectedRoute>} />
+          <Route path="/read" element={<ProtectedRoute><StoryReaderPage /></ProtectedRoute>} />
+          <Route path="/vocabulary" element={<ProtectedRoute><VocabularyPage /></ProtectedRoute>} />
         </Route>
 
         {/* Default Redirect */}
