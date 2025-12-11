@@ -1,12 +1,7 @@
 # services/book-service/main.py
 from fastapi import FastAPI, HTTPException, Depends, Header
-# services/book-service/main.py
-from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from azure.storage.blob import BlobServiceClient
-from azure.identity import DefaultAzureCredential
-from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
@@ -44,6 +39,14 @@ class StoryResponse(BaseModel):
     story_id: str
     status: str
     message: str
+
+async def trigger_container_job(job_name: str, story_id: str):
+    """Trigger Azure Container Job for story generation"""
+    # TODO: Implement actual Azure Container Job triggering
+    # For now, this is a placeholder that logs the action
+    print(f"🚀 Triggering {job_name} for story {story_id}")
+    # In production, this would use Azure Container Apps Job API
+    # to trigger the appropriate job with environment variables
 
 @app.get("/")
 def health():
@@ -119,4 +122,4 @@ async def get_story_status(story_id: str):
         except:
             pass
         
-        return {"story_id": story_id, "status":
+        return {"story_id": story_id, "status": "processing"}
