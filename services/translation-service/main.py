@@ -212,41 +212,47 @@ async def translate_word(
                 )
             
             data = response.json()
-            print(f"[LINGUEE API RESPONSE] Query: {query}, Response keys: {data.keys() if data else 'empty'}")
+            print(f"[LINGUEE API RESPONSE] Query: {query}, Response type: {type(data)}, Length: {len(data) if isinstance(data, list) else 'N/A'}")
         
         # Parse Linguee response
+        # The API returns an array of word entries
         translations = []
         examples = []
         
-        if 'exact_matches' in data and len(data['exact_matches']) > 0:
-            print(f"[PARSE] Found {len(data['exact_matches'])} exact matches")
-            for match in data['exact_matches']:
-                if 'translations' in match:
-                    for trans in match['translations']:
+        if isinstance(data, list) and len(data) > 0:
+            print(f"[PARSE] Found {len(data)} word entries")
+            
+            # Iterate through word entries (prioritize featured entries)
+            for entry in data:
+                if 'translations' in entry:
+                    for trans in entry['translations']:
                         if 'text' in trans:
                             translations.append(trans['text'])
-        
-        # Also check 'other_results' if no exact matches
-        if not translations and 'other_results' in data:
-            print(f"[PARSE] Checking other_results: {len(data['other_results'])} results")
-            for result in data['other_results']:
-                if 'translations' in result:
-                    for trans in result['translations']:
-                        if 'text' in trans:
-                            translations.append(trans['text'])
-        
-        # Get example sentences if available
-        if 'examples' in data:
-            for example in data['examples'][:3]:  # Limit to 3 examples
-                examples.append({
-                    'source': example.get('src', ''),
-                    'target': example.get('dst', '')
-                })
+                        
+                        # Collect examples from translations
+                        if 'examples' in trans and trans['examples']:
+                            for example in trans['examples'][:2]:  # Max 2 per translation
+                                if 'src' in example and 'dst' in example:
+                                    examples.append({
+                                        'source': example['src'],
+                                        'target': example['dst']
+                                    })
+                                    if len(examples) >= 3:  # Max 3 total examples
+                                        break
+                        
+                        if len(examples) >= 3:
+                            break
+                
+                # Stop after first entry if we have enough translations
+                if len(translations) >= 5:
+                    break
         
         # Fallback if no translations found
         if not translations:
-            print(f"[PARSE] No translations found. Full response: {json.dumps(data, indent=2)[:500]}")
+            print(f"[PARSE] No translations found. Response preview: {str(data)[:500]}")
             translations = [f"[Translation not found for '{query}']"]
+        else:
+            print(f"[PARSE] Successfully extracted {len(translations)} translations")
         
         result = Translation(
             word=query,
