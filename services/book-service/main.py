@@ -1,7 +1,12 @@
 # services/book-service/main.py
 from fastapi import FastAPI, HTTPException, Depends, Header
+# services/book-service/main.py
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from azure.storage.blob import BlobServiceClient
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
@@ -40,7 +45,6 @@ class StoryResponse(BaseModel):
     status: str
     message: str
 
-<<<<<<< Updated upstream
 class BookJobStatus(BaseModel):
     job_id: str
     status: str  # pending, processing, completed, failed
@@ -99,7 +103,7 @@ async def verify_token(authorization: str = Header(...)) -> dict:
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{AUTH_SERVICE_URL}/api/auth/token/verify",
+                f"{AUTH_SERVICE_URL}/api/auth/verify",
                 headers={"Authorization": f"Bearer {token}"}
             )
             
@@ -121,8 +125,6 @@ async def verify_token(authorization: str = Header(...)) -> dict:
 # API Endpoints
 # ==========================================
 
-=======
->>>>>>> Stashed changes
 @app.get("/")
 def health():
     return {"service": "book-service", "status": "healthy"}
