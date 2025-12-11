@@ -79,11 +79,17 @@ export const logout = async (): Promise<void> => {
 };
 
 export const getToken = async (): Promise<string | undefined> => {
-    const user = auth.currentUser;
-    if (user) {
-        return user.getIdToken();
-    }
-    return undefined;
+    // Wait for Firebase to initialize if needed
+    return new Promise((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            unsubscribe(); // Stop listening after first check
+            if (user) {
+                user.getIdToken().then(resolve).catch(() => resolve(undefined));
+            } else {
+                resolve(undefined);
+            }
+        });
+    });
 };
 
 export const getCurrentUser = async (): Promise<AuthUser | null> => {

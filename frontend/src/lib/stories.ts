@@ -13,6 +13,8 @@ export interface Story {
 
 export const getStories = async (): Promise<Story[]> => {
     const token = await getToken();
+
+    console.log("Getting stories with URL: ", BOOK_SERVICE_URL);
     
     const response = await fetch(`${BOOK_SERVICE_URL}/api/stories`, {
         headers: {
@@ -29,6 +31,8 @@ export const getStories = async (): Promise<Story[]> => {
 
 export const getStory = async (id: number): Promise<Story> => {
     const token = await getToken();
+
+    console.log("Getting story with URL: ", BOOK_SERVICE_URL);
     
     const response = await fetch(`${BOOK_SERVICE_URL}/api/stories/${id}`, {
         headers: {
@@ -46,6 +50,8 @@ export const getStory = async (id: number): Promise<Story> => {
 export const createStory = async (title: string, content: string, difficulty: string): Promise<Story> => {
     const token = await getToken();
     if (!token) throw new Error('Authentication required');
+
+    console.log("Creating story with URL: ", BOOK_SERVICE_URL);
 
     const response = await fetch(`${BOOK_SERVICE_URL}/api/stories`, {
         method: 'POST',
