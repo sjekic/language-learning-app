@@ -1,61 +1,46 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header, UploadFile, File
+# services/book-service/main.py
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
-from contextlib import asynccontextmanager
-import httpx
+from azure.storage.blob import BlobServiceClient
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
 import os
 import json
 import uuid
+import httpx
+from datetime import datetime
 
-from database import get_db_connection, close_db_connection
-from azure_jobs import trigger_story_generation_job, check_job_status
-from blob_storage import upload_to_blob, get_blob_url, delete_from_blob
+app = FastAPI(title="Book Service")
 
-# Configuration
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://localhost:8001")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    await get_db_connection()
-    yield
-    # Shutdown
-    await close_db_connection()
-
-app = FastAPI(
-    title="Book Service",
-    description="Book generation and library management microservice",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ==========================================
-# Pydantic Models
-# ==========================================
+# Azure config
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_SUBSCRIPTION_ID = os.getenv("AZURE_SUBSCRIPTION_ID")
+AZURE_RESOURCE_GROUP = os.getenv("AZURE_RESOURCE_GROUP")
+STORAGE_CONTAINER = "stories"
 
-class BookGenerationRequest(BaseModel):
-    level: str  # A1, A2, B1, B2, C1, C2
-    genre: str  # fantasy, sci-fi, adventure, mystery, slice-of-life
-    language: str  # Spanish, French, German, Italian, Japanese, Chinese
+blob_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING) if AZURE_STORAGE_CONNECTION_STRING else None
+
+class GenerateStoryRequest(BaseModel):
+    language: str
+    level: str
+    genre: str
     prompt: str
-    is_pro: bool = False  # Free = 10 pages, Pro = up to 100 pages
 
-class BookGenerationResponse(BaseModel):
-    job_id: str
+class StoryResponse(BaseModel):
+    story_id: str
     status: str
     message: str
 
+<<<<<<< Updated upstream
 class BookJobStatus(BaseModel):
     job_id: str
     status: str  # pending, processing, completed, failed
@@ -136,407 +121,80 @@ async def verify_token(authorization: str = Header(...)) -> dict:
 # API Endpoints
 # ==========================================
 
+=======
+>>>>>>> Stashed changes
 @app.get("/")
-async def root():
-    """Health check endpoint"""
-    return {"service": "book-service", "status": "healthy", "timestamp": datetime.utcnow()}
+def health():
+    return {"service": "book-service", "status": "healthy"}
 
-@app.post("/api/books/generate", response_model=BookGenerationResponse)
-async def generate_book(
-    request: BookGenerationRequest,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Trigger Azure Job to generate a new book/story
-    This is async - returns a job_id that can be polled for status
-    """
+@app.post("/api/books/generate", response_model=StoryResponse)
+async def generate_story(request: GenerateStoryRequest):
+    """Start story generation by uploading prompt and triggering manifest job"""
     try:
-        user_id = auth_data['user']['id']
+        # Generate unique story ID
+        story_id = f"story_{uuid.uuid4().hex[:8]}"
         
-        # Determine page count based on pro status
-        pages_estimate = 100 if request.is_pro else 10
-        
-        # Create job payload
-        job_payload = {
-            "user_id": user_id,
-            "title": request.prompt[:100],  # Use prompt as initial title
-            "language_code": request.language.lower()[:10],
-            "level": request.level,
+        # Prepare raw prompt data
+        raw_prompt = {
+            "userPrompt": request.prompt,
             "genre": request.genre,
-            "prompt": request.prompt,
-            "is_pro_book": request.is_pro,
-            "pages_estimate": pages_estimate
+            "readingLevel": request.level,
+            "language": request.language,
+            "createdAt": datetime.utcnow().isoformat()
         }
         
-        # Trigger Azure Container Job
-        job_id = await trigger_story_generation_job(job_payload)
+        # Upload to blob storage
+        blob_path = f"Users/{story_id}/prompt/raw_{story_id}.json"
+        blob = blob_client.get_blob_client(container=STORAGE_CONTAINER, blob=blob_path)
+        blob.upload_blob(json.dumps(raw_prompt), overwrite=True)
         
-        return BookGenerationResponse(
-            job_id=job_id,
-            status="pending",
-            message=f"Story generation job started. Use /api/books/jobs/{job_id} to check status."
+        print(f"✅ Uploaded prompt to {blob_path}")
+        
+        # Trigger manifest job
+        await trigger_container_job("manifest-job", story_id)
+        
+        return StoryResponse(
+            story_id=story_id,
+            status="processing",
+            message="Story generation started"
         )
         
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger book generation: {str(e)}"
-        )
+        print(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/books/jobs/{job_id}", response_model=BookJobStatus)
-async def get_job_status(
-    job_id: str,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Check the status of a book generation job
-    """
+@app.get("/api/books/{story_id}/status")
+async def get_story_status(story_id: str):
+    """Check story generation status"""
     try:
-        status_data = await check_job_status(job_id)
-        return BookJobStatus(**status_data)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check job status: {str(e)}"
-        )
-
-@app.get("/api/books", response_model=List[Book])
-async def get_user_books(
-    auth_data: dict = Depends(verify_token),
-    language: Optional[str] = None,
-    level: Optional[str] = None,
-    genre: Optional[str] = None,
-    favorites_only: bool = False
-):
-    """
-    Get all books for the current user with optional filters
-    """
-    conn = await get_db_connection()
-    
-    try:
-        user_id = auth_data['user']['id']
-        
-        # Build query with filters
-        query = """
-            SELECT 
-                b.id, b.title, b.description, b.text_blob_url, b.cover_image_url,
-                b.language_code, b.level, b.genre, b.is_pro_book, b.pages_estimate,
-                b.created_at, b.updated_at,
-                ub.is_owner, ub.is_favorite, ub.last_opened_at, ub.progress_percent
-            FROM books b
-            JOIN user_books ub ON b.id = ub.book_id
-            WHERE ub.user_id = $1
-        """
-        
-        params = [user_id]
-        param_count = 2
-        
-        if language:
-            query += f" AND b.language_code = ${param_count}"
-            params.append(language.lower())
-            param_count += 1
-        
-        if level:
-            query += f" AND b.level = ${param_count}"
-            params.append(level)
-            param_count += 1
-        
-        if genre:
-            query += f" AND b.genre = ${param_count}"
-            params.append(genre)
-            param_count += 1
-        
-        if favorites_only:
-            query += " AND ub.is_favorite = TRUE"
-        
-        query += " ORDER BY b.created_at DESC"
-        
-        books = await conn.fetch(query, *params)
-        
-        return [
-            Book(
-                id=book['id'],
-                title=book['title'],
-                description=book['description'],
-                text_blob_url=book['text_blob_url'],
-                cover_image_url=book['cover_image_url'],
-                language_code=book['language_code'],
-                level=book['level'],
-                genre=book['genre'],
-                is_pro_book=book['is_pro_book'],
-                pages_estimate=book['pages_estimate'],
-                created_at=book['created_at'].isoformat(),
-                updated_at=book['updated_at'].isoformat(),
-                is_owner=book['is_owner'],
-                is_favorite=book['is_favorite'],
-                last_opened_at=book['last_opened_at'].isoformat() if book['last_opened_at'] else None,
-                progress_percent=float(book['progress_percent']) if book['progress_percent'] else None
+        # Check if final story exists
+        try:
+            final_blob = blob_client.get_blob_client(
+                container=STORAGE_CONTAINER,
+                blob=f"Users/{story_id}/final/story_{story_id}.json"
             )
-            for book in books
-        ]
+            final_data = json.loads(final_blob.download_blob().readall().decode("utf-8"))
+            return {"story_id": story_id, "status": "completed", "story": final_data}
+        except:
+            pass
         
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch books: {str(e)}"
-        )
-
-@app.get("/api/books/{book_id}", response_model=Book)
-async def get_book_details(
-    book_id: int,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Get details of a specific book
-    """
-    conn = await get_db_connection()
-    
-    try:
-        user_id = auth_data['user']['id']
-        
-        book = await conn.fetchrow(
-            """
-            SELECT 
-                b.id, b.title, b.description, b.text_blob_url, b.cover_image_url,
-                b.language_code, b.level, b.genre, b.is_pro_book, b.pages_estimate,
-                b.created_at, b.updated_at,
-                ub.is_owner, ub.is_favorite, ub.last_opened_at, ub.progress_percent
-            FROM books b
-            JOIN user_books ub ON b.id = ub.book_id
-            WHERE b.id = $1 AND ub.user_id = $2
-            """,
-            book_id,
-            user_id
-        )
-        
-        if not book:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found or access denied"
+        # Check manifest for progress
+        try:
+            manifest_blob = blob_client.get_blob_client(
+                container=STORAGE_CONTAINER,
+                blob=f"Users/{story_id}/manifest.json"
             )
-        
-        # Update last_opened_at
-        await conn.execute(
-            """
-            UPDATE user_books
-            SET last_opened_at = NOW()
-            WHERE user_id = $1 AND book_id = $2
-            """,
-            user_id,
-            book_id
-        )
-        
-        return Book(
-            id=book['id'],
-            title=book['title'],
-            description=book['description'],
-            text_blob_url=book['text_blob_url'],
-            cover_image_url=book['cover_image_url'],
-            language_code=book['language_code'],
-            level=book['level'],
-            genre=book['genre'],
-            is_pro_book=book['is_pro_book'],
-            pages_estimate=book['pages_estimate'],
-            created_at=book['created_at'].isoformat(),
-            updated_at=book['updated_at'].isoformat(),
-            is_owner=book['is_owner'],
-            is_favorite=book['is_favorite'],
-            last_opened_at=datetime.utcnow().isoformat(),
-            progress_percent=float(book['progress_percent']) if book['progress_percent'] else None
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch book details: {str(e)}"
-        )
-
-@app.get("/api/books/{book_id}/content", response_model=BookContent)
-async def get_book_content(
-    book_id: int,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Get the full content of a book (download from blob storage and parse)
-    """
-    conn = await get_db_connection()
-    
-    try:
-        user_id = auth_data['user']['id']
-        
-        # Verify access
-        book = await conn.fetchrow(
-            """
-            SELECT b.id, b.title, b.text_blob_url
-            FROM books b
-            JOIN user_books ub ON b.id = ub.book_id
-            WHERE b.id = $1 AND ub.user_id = $2
-            """,
-            book_id,
-            user_id
-        )
-        
-        if not book:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found or access denied"
-            )
-        
-        # Download content from blob storage
-        blob_url = book['text_blob_url']
-        
-        # Fetch content from blob storage
-        async with httpx.AsyncClient() as client:
-            response = await client.get(blob_url)
+            manifest = json.loads(manifest_blob.download_blob().readall().decode("utf-8"))
             
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to fetch book content from storage"
-                )
+            # Count completed chunks
+            chunks_completed = len(manifest.get("chunks", []))
             
-            content_data = response.json()
+            return {
+                "story_id": story_id,
+                "status": manifest.get("status", "processing"),
+                "chunks_completed": chunks_completed
+            }
+        except:
+            pass
         
-        # Parse pages
-        pages = [
-            BookPage(page_number=page['id'], content=page['content'])
-            for page in content_data.get('pages', [])
-        ]
-        
-        return BookContent(
-            book_id=book['id'],
-            title=book['title'],
-            pages=pages
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch book content: {str(e)}"
-        )
-
-@app.put("/api/books/{book_id}", response_model=Book)
-async def update_user_book(
-    book_id: int,
-    request: UserBookUpdate,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Update user-specific book data (favorite, progress)
-    """
-    conn = await get_db_connection()
-    
-    try:
-        user_id = auth_data['user']['id']
-        
-        # Build update query
-        updates = []
-        values = []
-        param_count = 1
-        
-        if request.is_favorite is not None:
-            updates.append(f"is_favorite = ${param_count}")
-            values.append(request.is_favorite)
-            param_count += 1
-        
-        if request.progress_percent is not None:
-            updates.append(f"progress_percent = ${param_count}")
-            values.append(request.progress_percent)
-            param_count += 1
-        
-        if not updates:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No fields to update"
-            )
-        
-        values.extend([user_id, book_id])
-        
-        query = f"""
-            UPDATE user_books
-            SET {', '.join(updates)}
-            WHERE user_id = ${param_count} AND book_id = ${param_count + 1}
-        """
-        
-        await conn.execute(query, *values)
-        
-        # Return updated book
-        return await get_book_details(book_id, auth_data)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update book: {str(e)}"
-        )
-
-@app.delete("/api/books/{book_id}")
-async def delete_book(
-    book_id: int,
-    auth_data: dict = Depends(verify_token)
-):
-    """
-    Delete a book (only if user is owner)
-    """
-    conn = await get_db_connection()
-    
-    try:
-        user_id = auth_data['user']['id']
-        
-        # Check if user is owner
-        user_book = await conn.fetchrow(
-            """
-            SELECT ub.is_owner, b.text_blob_url, b.cover_image_url
-            FROM user_books ub
-            JOIN books b ON ub.book_id = b.id
-            WHERE ub.user_id = $1 AND ub.book_id = $2
-            """,
-            user_id,
-            book_id
-        )
-        
-        if not user_book:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found"
-            )
-        
-        if not user_book['is_owner']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the owner can delete this book"
-            )
-        
-        # Delete from blob storage
-        if user_book['text_blob_url']:
-            await delete_from_blob(user_book['text_blob_url'])
-        
-        if user_book['cover_image_url']:
-            await delete_from_blob(user_book['cover_image_url'])
-        
-        # Delete from database (CASCADE will handle user_books and vocabulary)
-        await conn.execute(
-            "DELETE FROM books WHERE id = $1",
-            book_id
-        )
-        
-        return {"message": "Book deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete book: {str(e)}"
-        )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8003)
-
+        return {"story_id": story_id, "status":
