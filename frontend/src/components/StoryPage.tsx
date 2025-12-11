@@ -1,7 +1,8 @@
 import React from 'react';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
-import { translateWord } from '../lib/linguee';
 import { saveWord, isWordSaved } from '../lib/vocabulary';
+
+import { translate } from '../lib/translation';
 
 interface StoryPageProps {
     content: string;
@@ -34,22 +35,22 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
             const cleanWord = hoveredWord.word.replace(/[.,!?\"]/g, '');
 
             try {
-                const results = await translateWord(cleanWord, language, 'English');
+                // Default to translating to English for now, can be made dynamic
+                const response = await translate(cleanWord, language, 'EN');
+
                 if (isMounted) {
-                    if (results.length > 0) {
+                    if (response.translations && response.translations.length > 0) {
                         // Format: "Translation (Part of Speech)"
-                        setTranslation(`${results[0].text} (${results[0].pos})`);
-                        setTranslationDetails({ text: results[0].text, pos: results[0].pos });
+                        const firstMatch = response.translations[0];
+                        setTranslation(`${firstMatch.text} (${firstMatch.pos})`);
                     } else {
                         setTranslation('No translation found');
                         setTranslationDetails(null);
                     }
                 }
             } catch (error) {
-                if (isMounted) {
-                    setTranslation('Error translating');
-                    setTranslationDetails(null);
-                }
+                console.error('Translation error:', error);
+                if (isMounted) setTranslation('Error translating');
             } finally {
                 if (isMounted) setLoading(false);
             }

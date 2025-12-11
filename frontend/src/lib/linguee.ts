@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001/api/translate';
+const API_URL = import.meta.env.VITE_TRANSLATION_SERVICE_URL;
 
 // Map full language names to ISO 639-1 codes
 const LANGUAGE_CODES: { [key: string]: string } = {
