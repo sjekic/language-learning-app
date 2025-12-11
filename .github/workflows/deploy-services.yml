@@ -1,0 +1,210 @@
+name: Deploy Microservices to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  ACR_NAME: bookinator
+  ACR_LOGIN_SERVER: bookinator.azurecr.io
+  RESOURCE_GROUP: BCSAI2025-DEVOPS-STUDENT-7B
+  CONTAINERAPPS_ENVIRONMENT: story-env
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      auth-service: ${{ steps.filter.outputs.auth-service }}
+      book-service: ${{ steps.filter.outputs.book-service }}
+      translation-service: ${{ steps.filter.outputs.translation-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for service changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            auth-service:
+              - 'services/auth-service/**'
+            book-service:
+              - 'services/book-service/**'
+            translation-service:
+              - 'services/translation-service/**'
+            user-service:
+              - 'services/user-service/**'
+
+  deploy-auth-service:
+    name: Deploy Auth Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.auth-service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          cd services/auth-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }} \
+                       -t ${{ env.ACR_LOGIN_SERVER }}/auth-service:latest .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/auth-service:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name auth-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }} \
+            --set-env-vars \
+              DATABASE_URL=secretref:database-url \
+              FIREBASE_SERVICE_ACCOUNT_KEY=secretref:firebase-service-account-key
+
+      - name: Deployment successful
+        run: |
+          echo "✅ Auth service deployed successfully"
+          az containerapp show \
+            --name auth-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.latestRevisionName -o tsv
+
+  deploy-book-service:
+    name: Deploy Book Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.book-service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          cd services/book-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/book-service:${{ github.sha }} \
+                       -t ${{ env.ACR_LOGIN_SERVER }}/book-service:latest .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/book-service:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/book-service:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name book-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/book-service:${{ github.sha }}
+
+      - name: Deployment successful
+        run: |
+          echo "✅ Book service deployed successfully"
+          az containerapp show \
+            --name book-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.latestRevisionName -o tsv
+
+  deploy-translation-service:
+    name: Deploy Translation Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.translation-service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          cd services/translation-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }} \
+                       -t ${{ env.ACR_LOGIN_SERVER }}/translation-service:latest .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/translation-service:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name translation-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }}
+
+      - name: Deployment successful
+        run: |
+          echo "✅ Translation service deployed successfully"
+          az containerapp show \
+            --name translation-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.latestRevisionName -o tsv
+
+  deploy-user-service:
+    name: Deploy User Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.user-service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          cd services/user-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/user-service:${{ github.sha }} \
+                       -t ${{ env.ACR_LOGIN_SERVER }}/user-service:latest .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/user-service:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/user-service:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name user-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/user-service:${{ github.sha }}
+
+      - name: Deployment successful
+        run: |
+          echo "✅ User service deployed successfully"
+          az containerapp show \
+            --name user-service \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.latestRevisionName -o tsv
+
