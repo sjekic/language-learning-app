@@ -1,0 +1,4 @@
+azure-storage-blob
+requests
+pillow
+python-dotenv

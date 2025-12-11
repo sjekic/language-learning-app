@@ -7,6 +7,7 @@ import { SignupPage } from './pages/SignupPage';
 import { StoryGeneratorPage } from './pages/StoryGeneratorPage';
 import { StoryReaderPage } from './pages/StoryReaderPage';
 import { StoryLibraryPage } from './pages/StoryLibraryPage';
+import { VocabularyPage } from './pages/VocabularyPage';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="/generate" element={<StoryGeneratorPage />} />
           <Route path="/library" element={<StoryLibraryPage />} />
           <Route path="/read" element={<StoryReaderPage />} />
+          <Route path="/vocabulary" element={<VocabularyPage />} />
         </Route>
 
         {/* Default Redirect */}
