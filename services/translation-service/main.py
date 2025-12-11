@@ -145,6 +145,33 @@ async def root():
         "cache_size": len(translation_cache)
     }
 
+@app.get("/api/test-linguee")
+async def test_linguee():
+    """Test the Linguee API directly"""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                LINGUEE_API_URL,
+                params={
+                    "query": "hello",
+                    "src": "en",
+                    "dst": "es",
+                    "guess_direction": False
+                }
+            )
+            
+            return {
+                "status_code": response.status_code,
+                "linguee_api_url": LINGUEE_API_URL,
+                "response_preview": response.text[:500] if response.text else "empty",
+                "response_data": response.json() if response.status_code == 200 else None
+            }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "linguee_api_url": LINGUEE_API_URL
+        }
+
 @app.get("/api/translate", response_model=Translation)
 async def translate_word(
     query: str = Query(..., description="Word or phrase to translate"),
@@ -178,18 +205,21 @@ async def translate_word(
             )
             
             if response.status_code != 200:
+                print(f"[LINGUEE API ERROR] Status: {response.status_code}, Response: {response.text}")
                 raise HTTPException(
                     status_code=response.status_code,
                     detail=f"Translation API error: {response.text}"
                 )
             
             data = response.json()
+            print(f"[LINGUEE API RESPONSE] Query: {query}, Response keys: {data.keys() if data else 'empty'}")
         
         # Parse Linguee response
         translations = []
         examples = []
         
         if 'exact_matches' in data and len(data['exact_matches']) > 0:
+            print(f"[PARSE] Found {len(data['exact_matches'])} exact matches")
             for match in data['exact_matches']:
                 if 'translations' in match:
                     for trans in match['translations']:
@@ -198,6 +228,7 @@ async def translate_word(
         
         # Also check 'other_results' if no exact matches
         if not translations and 'other_results' in data:
+            print(f"[PARSE] Checking other_results: {len(data['other_results'])} results")
             for result in data['other_results']:
                 if 'translations' in result:
                     for trans in result['translations']:
@@ -214,6 +245,7 @@ async def translate_word(
         
         # Fallback if no translations found
         if not translations:
+            print(f"[PARSE] No translations found. Full response: {json.dumps(data, indent=2)[:500]}")
             translations = [f"[Translation not found for '{query}']"]
         
         result = Translation(
