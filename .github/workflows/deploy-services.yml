@@ -14,6 +14,7 @@ env:
   ACR_LOGIN_SERVER: bookinator.azurecr.io
   RESOURCE_GROUP: BCSAI2025-DEVOPS-STUDENT-7B
   CONTAINERAPPS_ENVIRONMENT: story-env
+  AUTH_SERVICE_URL: http://auth-service
 
 jobs:
   detect-changes:
@@ -117,7 +118,10 @@ jobs:
           az containerapp update \
             --name book-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/book-service:${{ github.sha }}
+            --image ${{ env.ACR_LOGIN_SERVER }}/book-service:${{ github.sha }} \
+            --set-env-vars \
+              DATABASE_URL=secretref:database-url \
+              AUTH_SERVICE_URL=${{ env.AUTH_SERVICE_URL }}
 
       - name: Deployment successful
         run: |
@@ -158,7 +162,10 @@ jobs:
           az containerapp update \
             --name translation-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }}
+            --image ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }} \
+            --set-env-vars \
+              DATABASE_URL=secretref:database-url \
+              AUTH_SERVICE_URL=${{ env.AUTH_SERVICE_URL }}
 
       - name: Deployment successful
         run: |
@@ -199,7 +206,10 @@ jobs:
           az containerapp update \
             --name user-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/user-service:${{ github.sha }}
+            --image ${{ env.ACR_LOGIN_SERVER }}/user-service:${{ github.sha }} \
+            --set-env-vars \
+              DATABASE_URL=secretref:database-url \
+              AUTH_SERVICE_URL=${{ env.AUTH_SERVICE_URL }}
 
       - name: Deployment successful
         run: |
