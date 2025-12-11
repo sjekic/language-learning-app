@@ -1,6 +1,7 @@
 import React from 'react';
-
+import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { translateWord } from '../lib/linguee';
+import { saveWord, isWordSaved } from '../lib/vocabulary';
 
 interface StoryPageProps {
     content: string;
@@ -15,7 +16,9 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const words = content.split(' ');
     const [hoveredWord, setHoveredWord] = React.useState<{ word: string; index: number } | null>(null);
     const [translation, setTranslation] = React.useState<string | null>(null);
+    const [translationDetails, setTranslationDetails] = React.useState<{ text: string; pos: string } | null>(null);
     const [loading, setLoading] = React.useState(false);
+    const [savedWords, setSavedWords] = React.useState<Set<string>>(new Set());
 
     React.useEffect(() => {
         let isMounted = true;
@@ -36,12 +39,17 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                     if (results.length > 0) {
                         // Format: "Translation (Part of Speech)"
                         setTranslation(`${results[0].text} (${results[0].pos})`);
+                        setTranslationDetails({ text: results[0].text, pos: results[0].pos });
                     } else {
                         setTranslation('No translation found');
+                        setTranslationDetails(null);
                     }
                 }
             } catch (error) {
-                if (isMounted) setTranslation('Error translating');
+                if (isMounted) {
+                    setTranslation('Error translating');
+                    setTranslationDetails(null);
+                }
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -55,6 +63,24 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
             clearTimeout(timeoutId);
         };
     }, [hoveredWord, language]);
+
+    const handleSaveWord = () => {
+        if (!hoveredWord || !translationDetails) return;
+
+        const cleanWord = hoveredWord.word.replace(/[.,!?\\"]/g, '');
+
+        saveWord({
+            word: cleanWord,
+            translation: translationDetails.text,
+            partOfSpeech: translationDetails.pos,
+            sourceLanguage: language,
+            targetLanguage: 'English',
+            context: content,
+        });
+
+        setSavedWords(prev => new Set(prev).add(cleanWord.toLowerCase()));
+    };
+
 
     const handleWordClick = (word: string) => {
         const cleanWord = word.replace(/[.,!?\"]/g, '');
@@ -79,8 +105,28 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                             {word}
                             {/* Translation Tooltip */}
                             {hoveredWord?.index === index && (
-                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm text-neon-purple whitespace-nowrap z-50 shadow-lg backdrop-blur-xl">
-                                    {loading ? 'Translating...' : translation}
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm z-50 shadow-lg backdrop-blur-xl min-w-[200px]">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-neon-purple">
+                                            {loading ? 'Translating...' : translation}
+                                        </span>
+                                        {!loading && translationDetails && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSaveWord();
+                                                }}
+                                                className="p-1 hover:bg-neon-purple/20 rounded transition-colors"
+                                                title={isWordSaved(hoveredWord.word.replace(/[.,!?\\"]/g, ''), language) ? "Already saved" : "Save word"}
+                                            >
+                                                {isWordSaved(hoveredWord.word.replace(/[.,!?\\"]/g, ''), language) || savedWords.has(hoveredWord.word.replace(/[.,!?\\"]/g, '').toLowerCase()) ? (
+                                                    <BookmarkCheck className="w-4 h-4 text-neon-cyan" />
+                                                ) : (
+                                                    <Bookmark className="w-4 h-4 text-gray-400 hover:text-neon-purple" />
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
                                     <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-dark-800"></span>
                                 </span>
                             )}
