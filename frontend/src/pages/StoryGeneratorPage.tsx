@@ -62,13 +62,14 @@ export const StoryGeneratorPage: React.FC = () => {
                     content,
                 }));
 
-                // Save to localStorage
+                // Save to localStorage (including AI-generated cover URL)
                 saveStory({
                     title: result.story.title || formData.prompt || `My ${formData.language} Story`,
                     language: formData.language,
                     level: formData.level,
                     genre: formData.genre,
                     pages,
+                    coverUrl: result.story.coverUrl,
                 });
 
                 // Navigate to story reader
