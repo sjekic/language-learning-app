@@ -42,15 +42,6 @@ def main():
     manifest_raw = download_text("stories", f"Users/{story_id}/manifest.json")
     manifest = json.loads(manifest_raw)
 
-    # Download cover (optional, skip if not exists)
-    cover_url = None
-    try:
-        cover_raw = download_text("stories", f"Users/{story_id}/cover/cover_{story_id}.json")
-        cover = json.loads(cover_raw)
-        cover_url = cover.get("coverUrl")
-    except Exception:
-        print("No cover found, continuing without it...")
-
     # Download all chunks (1-indexed)
     chunks = []
     num_chapters = len(manifest.get("chapters", []))
