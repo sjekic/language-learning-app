@@ -69,6 +69,23 @@ git clone <repository-url>
 cd language-learning-app
 ```
 
+#### 2. Start everything locally (frontend + all services, uses uvicorn)
+
+1) Create a local env file (Azure DB + Firebase admin creds):
+
+```bash
+cp env.example .env.local
+# edit .env.local
+```
+
+2) Run the full stack:
+
+```bash
+./scripts/dev-fullstack.sh
+# or: npm run dev:fullstack
+# or: make dev-local
+```
+
 #### 2. Start Backend Services
 
 ```bash
@@ -103,7 +120,7 @@ docker exec -i language-learning-db psql -U postgres -d language_learning < data
 
 ### Environment Variables
 
-Create `.env` files in the root directory:
+Create `.env` files in the root directory (recommended: `.env.local`):
 
 ```bash
 # .env (root)
