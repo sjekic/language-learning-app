@@ -247,14 +247,29 @@ async def verify_token_only(firebase_data: dict = Depends(verify_auth_header)):
     """
     Simple token verification endpoint (for other services)
     
-    Returns basic user info without database lookup
+    Returns user info including internal DB user id so other services can use it.
     """
+    firebase_uid = firebase_data["uid"]
+    email = firebase_data.get("email")
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not found in Firebase token"
+        )
+
+    # Ensure user exists in DB so downstream services can rely on user.id
+    display_name = firebase_data.get("name") or email.split("@")[0]
+    user = await get_or_create_user(firebase_uid, email, display_name)
+
     return {
         "valid": True,
         "user": {
-            "firebase_uid": firebase_data['uid'],
-            "email": firebase_data.get('email'),
-            "email_verified": firebase_data.get('email_verified', False)
+            "id": user["id"],
+            "firebase_uid": user["firebase_uid"],
+            "email": user["email"],
+            "display_name": user.get("display_name"),
+            "email_verified": firebase_data.get("email_verified", False)
         }
     }
 

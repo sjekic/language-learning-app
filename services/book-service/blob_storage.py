@@ -6,8 +6,16 @@ This module provides functions for uploading, downloading, and managing book con
 import os
 import uuid
 from typing import Optional
-from azure.storage.blob import BlobServiceClient, ContentSettings
 import httpx
+
+# Azure SDK is optional for local development/testing.
+try:
+    from azure.storage.blob import BlobServiceClient, ContentSettings  # type: ignore
+    _AZURE_BLOB_AVAILABLE = True
+except ModuleNotFoundError:
+    BlobServiceClient = None  # type: ignore
+    ContentSettings = None  # type: ignore
+    _AZURE_BLOB_AVAILABLE = False
 
 # Azure Storage Configuration
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
@@ -39,6 +47,9 @@ async def upload_to_blob(
         container_name = AZURE_STORAGE_CONTAINER_NAME
     
     try:
+        if not _AZURE_BLOB_AVAILABLE:
+            raise RuntimeError("Azure Blob SDK not installed (azure-storage-blob). Using placeholder URL.")
+
         # Initialize blob service client
         blob_service_client = BlobServiceClient.from_connection_string(
             AZURE_STORAGE_CONNECTION_STRING
@@ -100,6 +111,9 @@ async def get_blob_url(blob_name: str, container_name: Optional[str] = None) -> 
         return blob_name
     
     try:
+        if not _AZURE_BLOB_AVAILABLE:
+            raise RuntimeError("Azure Blob SDK not installed (azure-storage-blob). Returning placeholder URL.")
+
         blob_service_client = BlobServiceClient.from_connection_string(
             AZURE_STORAGE_CONNECTION_STRING
         )
@@ -128,6 +142,9 @@ async def delete_from_blob(blob_url: str) -> bool:
     """
     
     try:
+        if not _AZURE_BLOB_AVAILABLE:
+            raise RuntimeError("Azure Blob SDK not installed (azure-storage-blob). Cannot delete blob.")
+
         blob_service_client = BlobServiceClient.from_connection_string(
             AZURE_STORAGE_CONNECTION_STRING
         )

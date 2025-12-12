@@ -8,8 +8,18 @@ import os
 import uuid
 import httpx
 from typing import Dict, Any
-from azure.identity import DefaultAzureCredential
-from azure.mgmt.containerinstance import ContainerInstanceManagementClient
+
+# Azure SDK is optional for local development/testing.
+# The current implementation is a placeholder anyway, so we avoid hard-crashing
+# if the developer hasn't installed Azure dependencies in their local venv.
+try:
+    from azure.identity import DefaultAzureCredential  # type: ignore
+    from azure.mgmt.containerinstance import ContainerInstanceManagementClient  # type: ignore
+    _AZURE_SDK_AVAILABLE = True
+except ModuleNotFoundError:
+    DefaultAzureCredential = None  # type: ignore
+    ContainerInstanceManagementClient = None  # type: ignore
+    _AZURE_SDK_AVAILABLE = False
 
 # Azure Configuration
 AZURE_SUBSCRIPTION_ID = os.getenv("AZURE_SUBSCRIPTION_ID", "")
@@ -64,6 +74,9 @@ async def trigger_story_generation_job(job_payload: Dict[str, Any]) -> str:
     # TODO: Replace this with actual Azure Container Jobs API call
     # Example using Azure SDK:
     """
+    if not _AZURE_SDK_AVAILABLE:
+        raise RuntimeError("Azure SDK not installed (azure-identity / azure-mgmt-containerinstance)")
+
     try:
         credential = DefaultAzureCredential()
         container_client = ContainerInstanceManagementClient(
@@ -161,6 +174,9 @@ async def check_job_status(job_id: str) -> Dict[str, Any]:
     # TODO: Replace with actual Azure API query
     # Example:
     """
+    if not _AZURE_SDK_AVAILABLE:
+        raise RuntimeError("Azure SDK not installed (azure-identity / azure-mgmt-containerinstance)")
+
     try:
         credential = DefaultAzureCredential()
         container_client = ContainerInstanceManagementClient(
@@ -214,6 +230,9 @@ async def cancel_job(job_id: str) -> bool:
     
     # TODO: Implement actual cancellation via Azure API
     """
+    if not _AZURE_SDK_AVAILABLE:
+        raise RuntimeError("Azure SDK not installed (azure-identity / azure-mgmt-containerinstance)")
+
     try:
         credential = DefaultAzureCredential()
         container_client = ContainerInstanceManagementClient(

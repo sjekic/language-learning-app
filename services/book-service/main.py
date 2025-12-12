@@ -2,15 +2,19 @@
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from azure.storage.blob import BlobServiceClient
-from azure.identity import DefaultAzureCredential
-from azure.mgmt.appcontainers import ContainerAppsAPIClient
 import os
 import json
 import uuid
 import httpx
-import subprocess
 from datetime import datetime
+
+# Azure SDK is optional for local development/testing.
+try:
+    from azure.storage.blob import BlobServiceClient  # type: ignore
+    _AZURE_BLOB_AVAILABLE = True
+except ModuleNotFoundError:
+    BlobServiceClient = None  # type: ignore
+    _AZURE_BLOB_AVAILABLE = False
 
 app = FastAPI(title="Book Service")
 
@@ -30,9 +34,13 @@ AZURE_LOCATION = os.getenv("AZURE_LOCATION", "westeurope")
 STORAGE_CONTAINER = "stories"
 
 # Development mode - set to "true" to skip Azure authentication
-DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true" or not _AZURE_BLOB_AVAILABLE or not AZURE_STORAGE_CONNECTION_STRING
 
-blob_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING) if AZURE_STORAGE_CONNECTION_STRING else None
+blob_client = (
+    BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+    if (BlobServiceClient and AZURE_STORAGE_CONNECTION_STRING and not DEV_MODE)
+    else None
+)
 
 class GenerateStoryRequest(BaseModel):
     language: str
@@ -96,6 +104,14 @@ async def generate_story(request: GenerateStoryRequest):
     try:
         # Generate unique story ID
         story_id = f"story_{uuid.uuid4().hex[:8]}"
+
+        # Local/dev mode: don't require Azure SDK or Azure Blob Storage
+        if DEV_MODE or blob_client is None:
+            return StoryResponse(
+                story_id=story_id,
+                status="processing",
+                message="Story generation started (DEV_MODE - Azure Blob operations skipped)"
+            )
         
         # Prepare raw prompt data
         raw_prompt = {
@@ -142,6 +158,9 @@ async def generate_story(request: GenerateStoryRequest):
 @app.get("/api/books/{story_id}/status")
 async def get_story_status(story_id: str):
     """Check story generation status"""
+    if DEV_MODE or blob_client is None:
+        return {"story_id": story_id, "status": "processing", "message": "DEV_MODE - status polling simulated"}
+
     # Check if final story exists
     try:
         final_blob = blob_client.get_blob_client(

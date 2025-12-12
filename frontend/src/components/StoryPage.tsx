@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
-import { saveWord, isWordSaved } from '../lib/vocabulary';
+import { saveWord, getSavedWords, toLanguageCode } from '../lib/vocabulary';
 
 import { translate } from '../lib/translation';
 import type { TranslationResponse } from '../lib/translation';
@@ -38,6 +38,28 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const [translationDetails, setTranslationDetails] = React.useState<TranslationResponse | null>(null);
     const [loading, setLoading] = React.useState(false);
     const [savedWords, setSavedWords] = React.useState<Set<string>>(new Set());
+
+    // Prefetch saved vocabulary words so the UI can show "saved" state without blocking renders.
+    React.useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const all = await getSavedWords();
+                const langCode = toLanguageCode(language);
+                const set = new Set(
+                    all
+                        .filter(w => toLanguageCode(w.sourceLanguage) === langCode)
+                        .map(w => w.word.toLowerCase())
+                );
+                if (mounted) setSavedWords(set);
+            } catch {
+                // ignore (backend might be down; local fallback handled in lib)
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [language]);
 
     React.useEffect(() => {
         let isMounted = true;
@@ -84,27 +106,67 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
         };
     }, [hoveredWord, language]);
 
-    const handleSaveWord = () => {
+    const handleSaveWord = async () => {
         if (!hoveredWord || !translationDetails) return;
 
         const cleanWord = hoveredWord.word.replace(/[.,!?"]/g, '');
 
-        saveWord({
-            word: cleanWord,
-            translation: translationDetails.translations[0] || 'N/A',
-            partOfSpeech: 'N/A', // Backend doesn't provide part of speech
-            sourceLanguage: language,
-            targetLanguage: 'English',
-            context: content,
-        });
-
-        setSavedWords(prev => new Set(prev).add(cleanWord.toLowerCase()));
+        try {
+            await saveWord({
+                word: cleanWord,
+                translation: translationDetails.translations[0] || 'N/A',
+                partOfSpeech: 'N/A', // Backend doesn't provide part of speech
+                sourceLanguage: language,
+                targetLanguage: 'English',
+                context: content,
+            });
+            setSavedWords(prev => new Set(prev).add(cleanWord.toLowerCase()));
+        } catch (e) {
+            console.error('Failed to save word:', e);
+        }
     };
 
 
     const handleWordClick = (word: string) => {
         const cleanWord = word.replace(/[.,!?"]/g, '');
         onWordHover(cleanWord);
+
+        // Clicking a word should "collect" it into the user's vocabulary.
+        // Prefer using the currently loaded translationDetails if it matches; otherwise fetch on demand.
+        const key = cleanWord.toLowerCase();
+        if (savedWords.has(key)) return;
+
+        let translationText: string = 'N/A';
+        try {
+            const matchesCurrent =
+                translationDetails &&
+                translationDetails.word &&
+                translationDetails.word.toLowerCase() === cleanWord.toLowerCase() &&
+                translationDetails.translations?.length > 0;
+
+            if (matchesCurrent) {
+                translationText = translationDetails.translations[0] || 'N/A';
+            } else {
+                const response = await translate(cleanWord, language, 'en');
+                translationText = response.translations?.[0] || 'N/A';
+            }
+        } catch {
+            // If translation fails (e.g. not authenticated), still save the word with a placeholder translation.
+        }
+
+        try {
+            await saveWord({
+                word: cleanWord,
+                translation: translationText,
+                partOfSpeech: 'N/A',
+                sourceLanguage: language,
+                targetLanguage: 'English',
+                context: content,
+            });
+            setSavedWords(prev => new Set(prev).add(key));
+        } catch (e) {
+            console.error('Failed to save word on click:', e);
+        }
     };
 
     return (
