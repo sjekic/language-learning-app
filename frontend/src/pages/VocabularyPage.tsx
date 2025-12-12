@@ -7,6 +7,7 @@ export const VocabularyPage: React.FC = () => {
     const [filteredWords, setFilteredWords] = useState<SavedWord[]>([]);
     const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     // Load words on mount
     useEffect(() => {
@@ -34,14 +35,19 @@ export const VocabularyPage: React.FC = () => {
         setFilteredWords(filtered);
     }, [words, selectedLanguage, searchQuery]);
 
-    const loadWords = () => {
-        const savedWords = getSavedWords();
-        setWords(savedWords);
+    const loadWords = async () => {
+        setIsLoading(true);
+        try {
+            const savedWords = await getSavedWords();
+            setWords(savedWords);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleDelete = (id: string) => {
-        deleteSavedWord(id);
-        loadWords();
+    const handleDelete = async (id: string) => {
+        await deleteSavedWord(id);
+        await loadWords();
     };
 
     const handleExport = () => {
@@ -121,7 +127,11 @@ export const VocabularyPage: React.FC = () => {
                 )}
 
                 {/* Words List */}
-                {filteredWords.length === 0 ? (
+                    {isLoading ? (
+                        <div className="glass-dark rounded-2xl border border-white/10 p-12 text-center">
+                            <p className="text-gray-400">Loading vocabulary…</p>
+                        </div>
+                    ) : filteredWords.length === 0 ? (
                     <div className="glass-dark rounded-2xl border border-white/10 p-12 text-center">
                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neon-purple/10 flex items-center justify-center">
                             <BookOpen className="w-8 h-8 text-neon-purple" />
