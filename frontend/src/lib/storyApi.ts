@@ -13,6 +13,7 @@ export interface StoryStatus {
     story?: {
         title: string;
         content: string[];
+        coverUrl?: string;
     };
     chunks_completed?: number;
 }

@@ -7,6 +7,7 @@ export interface Story {
     level: string;
     genre: string;
     pages: { id: number; content: string }[];
+    coverUrl?: string;
     createdAt: string;
 }
 

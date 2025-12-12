@@ -1,37 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Book, Sparkles, Trash2, Filter, X } from 'lucide-react';
 import { getStories, deleteStory, type Story } from '../lib/storage';
-import { generateStoryCover } from '../lib/generateStoryCover';
+import { generateStoryCover, type StoryGenre } from '../lib/generateStoryCover';
 import { Select } from '../components/Select';
 
 export const StoryLibraryPage: React.FC = () => {
     const navigate = useNavigate();
-    const [stories, setStories] = useState<Story[]>([]);
-    const [coverImages, setCoverImages] = useState<Map<string, string>>(new Map());
+    // Initialize stories directly from localStorage using lazy initializer
+    const [stories, setStories] = useState<Story[]>(() => getStories());
 
     // Filter State
     const [selectedLevel, setSelectedLevel] = useState<string>('');
     const [selectedGenre, setSelectedGenre] = useState<string>('');
     const [selectedLanguage, setSelectedLanguage] = useState<string>('');
 
-    useEffect(() => {
-        const loadedStories = getStories();
-        setStories(loadedStories);
-
-        // Generate cover images
+    // Generate cover images - computed value, not side effect
+    const coverImages = useMemo(() => {
         const newCoverImages = new Map<string, string>();
-        loadedStories.forEach(story => {
-            const cover = generateStoryCover(
-                story.genre as any,
-                story.title,
-                400,
-                600
-            );
-            newCoverImages.set(story.id, cover);
+        stories.forEach(story => {
+            try {
+                const cover = generateStoryCover(
+                    story.genre as StoryGenre,
+                    story.title,
+                    400,
+                    600
+                );
+                if (cover) {
+                    newCoverImages.set(story.id, cover);
+                }
+            } catch (error) {
+                console.error('Error generating cover for story:', story.id, error);
+            }
         });
-        setCoverImages(newCoverImages);
-    }, []);
+        return newCoverImages;
+    }, [stories]);
 
     const handleReadStory = (story: Story) => {
         navigate('/read', {
@@ -180,12 +183,32 @@ export const StoryLibraryPage: React.FC = () => {
                                 onClick={() => handleReadStory(story)}
                                 className="group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transform transition-all duration-300 hover:scale-105 hover:z-10"
                             >
-                                {/* Cover Image */}
-                                <img
-                                    src={coverImages.get(story.id) || ''}
-                                    alt={story.title}
-                                    className="absolute inset-0 w-full h-full object-cover"
-                                />
+                                {/* AI-Generated Cover or Fallback */}
+                                {story.coverUrl ? (
+                                    <img
+                                        src={story.coverUrl}
+                                        alt={story.title}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                        onError={(e) => {
+                                            // Fallback to gradient on error
+                                            e.currentTarget.style.display = 'none';
+                                        }}
+                                    />
+                                ) : coverImages.get(story.id) ? (
+                                    <img
+                                        src={coverImages.get(story.id)}
+                                        alt={story.title}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <div className={`absolute inset-0 bg-gradient-to-br ${
+                                        story.genre === 'fantasy' ? 'from-purple-600 via-purple-800 to-pink-600' :
+                                        story.genre === 'sci-fi' ? 'from-cyan-600 via-blue-700 to-purple-700' :
+                                        story.genre === 'adventure' ? 'from-orange-500 via-red-600 to-pink-600' :
+                                        story.genre === 'mystery' ? 'from-indigo-600 via-purple-700 to-purple-900' :
+                                        'from-green-600 via-cyan-600 to-blue-600'
+                                    }`} />
+                                )}
 
                                 {/* Gradient Overlay */}
                                 <div className="absolute inset-0 story-overlay" />

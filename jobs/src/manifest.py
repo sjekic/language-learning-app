@@ -140,7 +140,7 @@ def main():
         trigger_blob_name = f"triggers/orchestrator-job-scheduled/{trigger_id}.json"
         blob_client = blob_service.get_blob_client(container="stories", blob=trigger_blob_name)
         blob_client.upload_blob(json.dumps(trigger_data), overwrite=True)
-        print(f"\n✅ Created orchestrator trigger blob")
+        print(f"✅ Created orchestrator trigger blob")
     except Exception as e:
         print(f"⚠️  Failed to create orchestrator trigger: {e}")
     

@@ -219,9 +219,9 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                                                                 handleSaveWord();
                                                             }}
                                                             className="p-1 hover:bg-neon-purple/20 rounded transition-colors"
-                                                                title={isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) ? "Already saved" : "Save word"}
+                                                                title={savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? "Already saved" : "Save word"}
                                                             >
-                                                                {isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) || savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? (
+                                                                {savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? (
                                                                 <BookmarkCheck className="w-4 h-4 text-neon-cyan" />
                                                             ) : (
                                                                 <Bookmark className="w-4 h-4 text-gray-400 hover:text-neon-purple" />
