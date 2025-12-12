@@ -172,23 +172,24 @@ async def get_story_status(story_id: str):
     except:
         pass
     
-    # Check manifest for progress
+    # Count completed chunks by listing blob storage
     try:
-        manifest_blob = blob_client.get_blob_client(
-            container=STORAGE_CONTAINER,
-            blob=f"Users/{story_id}/manifest.json"
-        )
-        manifest = json.loads(manifest_blob.download_blob().readall().decode("utf-8"))
+        container_client = blob_client.get_container_client(STORAGE_CONTAINER)
         
-        # Count completed chunks
-        chunks_completed = len(manifest.get("chunks", []))
+        # List all chunk blobs
+        chunk_prefix = f"Users/{story_id}/chunks/chunk_"
+        chunks = list(container_client.list_blobs(name_starts_with=chunk_prefix))
+        chunks_completed = len(chunks)
+        
+        print(f"📊 Story {story_id} progress: {chunks_completed}/10 chunks completed")
         
         return {
             "story_id": story_id,
-            "status": manifest.get("status", "processing"),
+            "status": "processing",
             "chunks_completed": chunks_completed
         }
-    except:
+    except Exception as e:
+        print(f"⚠️  Error checking status for {story_id}: {e}")
         pass
     
-    return {"story_id": story_id, "status": "processing"}
+    return {"story_id": story_id, "status": "processing", "chunks_completed": 0}
