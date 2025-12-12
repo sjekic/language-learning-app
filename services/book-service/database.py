@@ -2,9 +2,12 @@ import asyncpg
 import os
 from typing import Optional
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from root .env/.env.local (works no matter where you run from)
+_ROOT_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(_ROOT_DIR / ".env", override=False)
+load_dotenv(_ROOT_DIR / ".env.local", override=False)
 
 # Database connection pool
 pool: Optional[asyncpg.Pool] = None
