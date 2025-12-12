@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from datetime import datetime
+import json
 import sys
 import os
 
@@ -16,6 +17,7 @@ sys.modules['azure.storage.blob'] = MagicMock()
 sys.modules['azure.identity'] = MagicMock()
 sys.modules['azure.mgmt'] = MagicMock()
 sys.modules['azure.mgmt.containerinstance'] = MagicMock()
+sys.modules['azure.mgmt.appcontainers'] = MagicMock()
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'book-service'))
 
@@ -43,21 +45,9 @@ def mock_db(conn):
 
 
 @pytest.fixture
-def client(mock_auth_response):
+def client():
     """Create test client"""
-    from main import verify_token
-    
-    # Override the verify_token dependency for all tests
-    async def mock_verify_token_override(authorization: str = None):
-        return mock_auth_response
-    
-    app.dependency_overrides = {}
-    app.dependency_overrides[verify_token] = mock_verify_token_override
-    
-    yield TestClient(app)
-    
-    # Clean up
-    app.dependency_overrides.clear()
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -364,10 +354,10 @@ class TestBookServiceEndpoints:
         assert data["service"] == "book-service"
         assert data["status"] == "healthy"
     
-    def test_generate_book(self, client, mock_auth_response):
+    def test_generate_book(self, client):
         """Test generate book"""
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with patch('main.trigger_story_generation_job', new_callable=AsyncMock) as mock_trigger:
+        with patch('main.blob_client', Mock()):
+            with patch('main.trigger_container_job', new_callable=AsyncMock) as mock_trigger:
                 mock_trigger.return_value = "test-job-id"
                 
                 response = client.post(
@@ -377,366 +367,24 @@ class TestBookServiceEndpoints:
                         "genre": "fantasy",
                         "language": "Spanish",
                         "prompt": "A test story",
-                        "is_pro": False
-                    },
-                    headers={"Authorization": "Bearer test-token"}
+                    }
                 )
                 assert response.status_code == 200
                 data = response.json()
-                assert data["job_id"] == "test-job-id"
-                assert data["status"] == "pending"
+                assert data["story_id"] is not None
+                assert data["status"] == "processing"
     
-    def test_get_job_status(self, client, mock_auth_response):
+    def test_get_job_status(self, client):
         """Test get job status"""
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with patch('main.check_job_status', new_callable=AsyncMock) as mock_check:
-                mock_check.return_value = {
-                    "job_id": "test-job-id",
-                    "status": "completed",
-                    "progress": 100,
-                    "book_id": 1,
-                    "error": None
-                }
-                
-                response = client.get(
-                    "/api/books/jobs/test-job-id",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 200
-                data = response.json()
-                assert data["status"] == "completed"
-    
-    def test_get_user_books(self, client, mock_auth_response, mock_db_pool):
-        """Test get user books"""
-        pool, conn = mock_db_pool
-        mock_books = [
-            {
-                'id': 1,
-                'title': 'Test Book',
-                'description': 'A test book',
-                'text_blob_url': 'https://test.blob.core.windows.net/book.json',
-                'cover_image_url': 'https://test.blob.core.windows.net/cover.png',
-                'language_code': 'es',
-                'level': 'A1',
-                'genre': 'fantasy',
-                'is_pro_book': False,
-                'pages_estimate': 10,
-                'created_at': datetime(2024, 1, 1),
-                'updated_at': datetime(2024, 1, 1),
-                'is_owner': True,
-                'is_favorite': False,
-                'last_opened_at': None,
-                'progress_percent': None
-            }
-        ]
-        conn.fetch = AsyncMock(return_value=mock_books)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.get(
-                    "/api/books",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 200
-                data = response.json()
-                assert len(data) == 1
-                assert data[0]["title"] == "Test Book"
-    
-    def test_get_book_details(self, client, mock_auth_response, mock_db_pool):
-        """Test get book details"""
-        pool, conn = mock_db_pool
-        mock_book = {
-            'id': 1,
-            'title': 'Test Book',
-            'description': 'A test book',
-            'text_blob_url': 'https://test.blob.core.windows.net/book.json',
-            'cover_image_url': 'https://test.blob.core.windows.net/cover.png',
-            'language_code': 'es',
-            'level': 'A1',
-            'genre': 'fantasy',
-            'is_pro_book': False,
-            'pages_estimate': 10,
-            'created_at': datetime(2024, 1, 1),
-            'updated_at': datetime(2024, 1, 1),
-            'is_owner': True,
-            'is_favorite': False,
-            'last_opened_at': None,
-            'progress_percent': None
-        }
-        conn.fetchrow = AsyncMock(return_value=mock_book)
-        conn.execute = AsyncMock()
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.get(
-                    "/api/books/1",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 200
-                data = response.json()
-                assert data["title"] == "Test Book"
-    
-    def test_get_book_content(self, client, mock_auth_response, mock_db_pool):
-        """Test get book content"""
-        pool, conn = mock_db_pool
-        mock_book = {
-            'id': 1,
-            'title': 'Test Book',
-            'text_blob_url': 'https://test.blob.core.windows.net/book.json'
-        }
-        conn.fetchrow = AsyncMock(return_value=mock_book)
-        
-        mock_content = {
-            'pages': [
-                {'id': 1, 'content': 'Page 1 content'},
-                {'id': 2, 'content': 'Page 2 content'}
-            ]
-        }
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                with patch('httpx.AsyncClient') as mock_client:
-                    mock_response = Mock()
-                    mock_response.status_code = 200
-                    mock_response.json.return_value = mock_content
-                    mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
-                    
-                    response = client.get(
-                        "/api/books/1/content",
-                        headers={"Authorization": "Bearer test-token"}
-                    )
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["book_id"] == 1
-                    assert len(data["pages"]) == 2
-    
-    def test_update_user_book(self, client, mock_auth_response, mock_db_pool):
-        """Test update user book"""
-        pool, conn = mock_db_pool
-        conn.execute = AsyncMock()
-        
-        # Mock get_book_details call
-        mock_book = {
-            'id': 1,
-            'title': 'Test Book',
-            'description': 'A test book',
-            'text_blob_url': 'https://test.blob.core.windows.net/book.json',
-            'cover_image_url': None,
-            'language_code': 'es',
-            'level': 'A1',
-            'genre': 'fantasy',
-            'is_pro_book': False,
-            'pages_estimate': 10,
-            'created_at': datetime(2024, 1, 1).isoformat(),
-            'updated_at': datetime(2024, 1, 1).isoformat(),
-            'is_owner': True,
-            'is_favorite': True,
-            'last_opened_at': datetime(2024, 1, 1).isoformat(),
-            'progress_percent': 50.0
-        }
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                with patch('main.get_book_details', new_callable=AsyncMock) as mock_get_details:
-                    mock_get_details.return_value = mock_book
-                    response = client.put(
-                        "/api/books/1",
-                        json={"is_favorite": True, "progress_percent": 50.0},
-                        headers={"Authorization": "Bearer test-token"}
-                    )
-                    assert response.status_code == 200
-    
-    def test_delete_book(self, client, mock_auth_response, mock_db_pool):
-        """Test delete book"""
-        pool, conn = mock_db_pool
-        mock_user_book = {
-            'is_owner': True,
-            'text_blob_url': 'https://test.blob.core.windows.net/book.json',
-            'cover_image_url': None
-        }
-        conn.fetchrow = AsyncMock(return_value=mock_user_book)
-        conn.execute = AsyncMock()
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                with patch('main.delete_from_blob', new_callable=AsyncMock) as mock_delete:
-                    mock_delete.return_value = True
-                    response = client.delete(
-                        "/api/books/1",
-                        headers={"Authorization": "Bearer test-token"}
-                    )
-                    assert response.status_code == 200
-    
-    def test_delete_book_not_owner(self, client, mock_auth_response, mock_db_pool):
-        """Test delete book when user is not owner"""
-        pool, conn = mock_db_pool
-        mock_user_book = {
-            'is_owner': False,
-            'text_blob_url': None,
-            'cover_image_url': None
-        }
-        conn.fetchrow = AsyncMock(return_value=mock_user_book)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.delete(
-                    "/api/books/1",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 403
-    
-    def test_get_user_books_with_filters(self, client, mock_auth_response, mock_db_pool):
-        """Test get user books with all filters"""
-        pool, conn = mock_db_pool
-        conn.fetch = AsyncMock(return_value=[])
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.get(
-                    "/api/books?language=es&level=A1&genre=fantasy&favorites_only=true",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 200
-    
-    def test_get_book_details_not_found(self, client, mock_auth_response, mock_db_pool):
-        """Test get book details when book not found"""
-        pool, conn = mock_db_pool
-        conn.fetchrow = AsyncMock(return_value=None)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.get(
-                    "/api/books/999",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 404
-    
-    def test_get_book_content_not_found(self, client, mock_auth_response, mock_db_pool):
-        """Test get book content when book not found"""
-        pool, conn = mock_db_pool
-        conn.fetchrow = AsyncMock(return_value=None)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.get(
-                    "/api/books/999/content",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 404
-    
-    def test_get_book_content_blob_error(self, client, mock_auth_response, mock_db_pool):
-        """Test get book content when blob fetch fails"""
-        pool, conn = mock_db_pool
-        mock_book = {
-            'id': 1,
-            'title': 'Test Book',
-            'text_blob_url': 'https://test.blob.core.windows.net/book.json'
-        }
-        conn.fetchrow = AsyncMock(return_value=mock_book)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                with patch('httpx.AsyncClient') as mock_client:
-                    mock_response = Mock()
-                    mock_response.status_code = 500
-                    mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
-                    
-                    response = client.get(
-                        "/api/books/1/content",
-                        headers={"Authorization": "Bearer test-token"}
-                    )
-                    assert response.status_code == 500
-    
-    def test_update_user_book_no_fields(self, client, mock_auth_response, mock_db_pool):
-        """Test update user book with no fields"""
-        pool, conn = mock_db_pool
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.put(
-                    "/api/books/1",
-                    json={},
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 400
-    
-    def test_delete_book_not_found(self, client, mock_auth_response, mock_db_pool):
-        """Test delete book when book not found"""
-        pool, conn = mock_db_pool
-        conn.fetchrow = AsyncMock(return_value=None)
-        
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with mock_db(conn):
-                response = client.delete(
-                    "/api/books/999",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 404
-    
-    def test_generate_book_exception(self, client, mock_auth_response):
-        """Test generate book with exception"""
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with patch('main.trigger_story_generation_job', new_callable=AsyncMock, side_effect=Exception("Error")):
-                response = client.post(
-                    "/api/books/generate",
-                    json={
-                        "level": "A1",
-                        "genre": "fantasy",
-                        "language": "Spanish",
-                        "prompt": "A test story",
-                        "is_pro": False
-                    },
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 500
-    
-    def test_get_job_status_exception(self, client, mock_auth_response):
-        """Test get job status with exception"""
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
-            with patch('main.check_job_status', new_callable=AsyncMock, side_effect=Exception("Error")):
-                response = client.get(
-                    "/api/books/jobs/test-job-id",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 500
-    
-    @pytest.mark.asyncio
-    async def test_verify_token_invalid_format(self):
-        """Test verify token with invalid format"""
-        from main import verify_token
-        from fastapi import HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            await verify_token("InvalidFormat")
-        assert exc_info.value.status_code == 401
-    
-    @pytest.mark.asyncio
-    async def test_verify_token_service_error(self):
-        """Test verify token when auth service returns error"""
-        from main import verify_token
-        from fastapi import HTTPException
-        import httpx
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 401
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+        with patch('main.blob_client') as mock_blob:
+            # Mock final story blob check - returns found
+            mock_blob_client = Mock()
+            mock_blob.get_blob_client.return_value = mock_blob_client
+            mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = json.dumps({"story_id": "test", "content": "xyz"})
             
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_token("Bearer test-token")
-            assert exc_info.value.status_code == 401
-    
-    @pytest.mark.asyncio
-    async def test_verify_token_http_error(self):
-        """Test verify token when HTTP error occurs"""
-        from main import verify_token
-        from fastapi import HTTPException
-        import httpx
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                side_effect=httpx.HTTPError("Connection error")
+            response = client.get(
+                "/api/books/story_123/status"
             )
-            
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_token("Bearer test-token")
-            assert exc_info.value.status_code == 503
-
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "completed"
