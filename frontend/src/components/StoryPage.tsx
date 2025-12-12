@@ -39,6 +39,11 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const [loading, setLoading] = React.useState(false);
     const [savedWords, setSavedWords] = React.useState<Set<string>>(new Set());
 
+    // Helper function to check if a word is already saved
+    const isWordSaved = (word: string, _language: string) => {
+        return savedWords.has(word.toLowerCase());
+    };
+
     // Prefetch saved vocabulary words so the UI can show "saved" state without blocking renders.
     React.useEffect(() => {
         let mounted = true;
@@ -127,7 +132,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     };
 
 
-    const handleWordClick = (word: string) => {
+    const handleWordClick = async (word: string) => {
         const cleanWord = word.replace(/[.,!?"]/g, '');
         onWordHover(cleanWord);
 
