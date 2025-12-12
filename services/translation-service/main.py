@@ -71,7 +71,7 @@ class SaveVocabularyRequest(BaseModel):
     word: str
     translation: str
     language_code: str
-    book_id: int
+    book_id: Optional[int] = None
 
 # ==========================================
 # Authentication Dependency
@@ -130,6 +130,61 @@ def get_language_code_mapping(language: str) -> str:
         'english': 'en'
     }
     return mapping.get(language.lower(), language.lower()[:2])
+
+
+async def ensure_vocabulary_book_for_user(user_id: int, language_code: str) -> int:
+    """
+    Vocabulary entries require a valid book_id due to FK constraints.
+    When the frontend doesn't have a real book_id (e.g. local/mock stories),
+    we attach saved words to an auto-created "Vocabulary" book for the user.
+    """
+    conn = await get_db_connection()
+
+    # Look for an existing per-user vocabulary book for this language
+    existing_id = await conn.fetchval(
+        """
+        SELECT b.id
+        FROM books b
+        JOIN user_books ub ON ub.book_id = b.id
+        WHERE ub.user_id = $1
+          AND b.genre = 'vocabulary'
+          AND b.language_code = $2
+        ORDER BY b.created_at DESC
+        LIMIT 1
+        """,
+        user_id,
+        language_code
+    )
+
+    if existing_id:
+        return int(existing_id)
+
+    # Create a new book row. text_blob_url must be NOT NULL; for vocab-only we use a placeholder.
+    book_id = await conn.fetchval(
+        """
+        INSERT INTO books (title, description, text_blob_url, language_code, genre, is_pro_book)
+        VALUES ($1, $2, $3, $4, $5, FALSE)
+        RETURNING id
+        """,
+        "Vocabulary",
+        "Auto-created book to attach saved vocabulary words (no reading content).",
+        "about:blank",
+        language_code,
+        "vocabulary"
+    )
+
+    # Link to user (safe if called concurrently)
+    await conn.execute(
+        """
+        INSERT INTO user_books (user_id, book_id, is_owner)
+        VALUES ($1, $2, TRUE)
+        ON CONFLICT (user_id, book_id) DO NOTHING
+        """,
+        user_id,
+        int(book_id)
+    )
+
+    return int(book_id)
 
 # ==========================================
 # API Endpoints
@@ -291,6 +346,13 @@ async def save_vocabulary_word(
     
     try:
         user_id = auth_data['user']['id']
+
+        # If the client doesn't know a real book_id (common in local/mock flows),
+        # attach vocabulary to an auto-created per-user vocabulary book.
+        book_id = request.book_id or await ensure_vocabulary_book_for_user(
+            user_id=user_id,
+            language_code=request.language_code
+        )
         
         # Check if word already exists
         existing = await conn.fetchrow(
@@ -300,7 +362,7 @@ async def save_vocabulary_word(
             WHERE user_id = $1 AND book_id = $2 AND language_code = $3 AND word = $4
             """,
             user_id,
-            request.book_id,
+            book_id,
             request.language_code,
             request.word
         )
@@ -333,7 +395,7 @@ async def save_vocabulary_word(
                           hover_count, last_seen_at, created_at
                 """,
                 user_id,
-                request.book_id,
+                book_id,
                 request.language_code,
                 request.word,
                 request.translation

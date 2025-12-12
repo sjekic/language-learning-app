@@ -8,6 +8,7 @@ help:
 	@echo "============================================="
 	@echo "make install     - Install all dependencies"
 	@echo "make dev         - Start development environment"
+	@echo "make dev-local   - Start frontend + all FastAPI services locally (uvicorn + Vite)"
 	@echo "make build       - Build all Docker images"
 	@echo "make start       - Start all services"
 	@echo "make stop        - Stop all services"
@@ -33,6 +34,10 @@ install:
 dev:
 	@echo "🚀 Starting development environment..."
 	docker-compose up --build
+
+# Start local dev environment (no docker; uses uvicorn for services + Vite for frontend)
+dev-local:
+	@bash scripts/dev-fullstack.sh
 
 # Build Docker images
 build:

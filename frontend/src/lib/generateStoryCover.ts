@@ -32,7 +32,7 @@ const genreGradients: Record<StoryGenre, GradientConfig> = {
 
 export const generateStoryCover = (
     genre: StoryGenre,
-    title: string,
+    _title: string,
     width: number = 400,
     height: number = 600
 ): string => {
@@ -61,7 +61,7 @@ export const generateStoryCover = (
     ctx.fillRect(0, 0, width, height);
 
     // Add abstract shapes/orbs for visual interest
-    addAbstractShapes(ctx, width, height, genre);
+    addAbstractShapes(ctx, width, height);
 
     // Add subtle noise texture
     addNoiseTexture(ctx, width, height);
@@ -72,8 +72,7 @@ export const generateStoryCover = (
 function addAbstractShapes(
     ctx: CanvasRenderingContext2D,
     width: number,
-    height: number,
-    genre: StoryGenre
+    height: number
 ) {
     // Large orb
     const orb1 = ctx.createRadialGradient(
