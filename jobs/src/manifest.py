@@ -90,8 +90,15 @@ def main():
     print(f"   Title: {manifest['title']}")
     print(f"   Chapters: {len(manifest['chapters'])}")
     
-    # Orchestration: Create trigger blobs for chunk jobs
-    print(f"\n🔄 Creating trigger blobs for {len(manifest['chapters'])} chunk jobs...")
+    # Orchestration: Create trigger blobs for 3 batch jobs (generating 10 pages total)
+    # Batch 1: Chapters 1-3, Batch 2: Chapters 4-7, Batch 3: Chapters 8-10
+    batches = [
+        {"start": 1, "end": 3},   # Batch 1: 3 chapters
+        {"start": 4, "end": 7},   # Batch 2: 4 chapters  
+        {"start": 8, "end": 10}   # Batch 3: 3 chapters
+    ]
+    
+    print(f"\n🔄 Creating 3 batch job triggers for {len(manifest['chapters'])} chapters...")
     
     connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     blob_service = BlobServiceClient.from_connection_string(connection_string)
@@ -99,12 +106,14 @@ def main():
     import uuid
     from datetime import datetime
     
-    for i in range(1, len(manifest['chapters']) + 1):
+    for batch_num, batch in enumerate(batches, start=1):
         try:
             trigger_id = uuid.uuid4().hex[:8]
             trigger_data = {
                 "story_id": story_id,
-                "chunk_id": i,
+                "batch_id": batch_num,
+                "chapter_start": batch["start"],
+                "chapter_end": batch["end"],
                 "job_name": "chunk-job",
                 "timestamp": datetime.utcnow().isoformat(),
                 "trigger_id": trigger_id
@@ -113,9 +122,9 @@ def main():
             trigger_blob_name = f"triggers/chunk-job-scheduled/{trigger_id}.json"
             blob_client = blob_service.get_blob_client(container="stories", blob=trigger_blob_name)
             blob_client.upload_blob(json.dumps(trigger_data), overwrite=True)
-            print(f"   ✅ Created trigger blob for chunk {i}")
+            print(f"   ✅ Created trigger blob for batch {batch_num} (chapters {batch['start']}-{batch['end']})")
         except Exception as e:
-            print(f"   ⚠️  Failed to create trigger for chunk {i}: {e}")
+            print(f"   ⚠️  Failed to create trigger for batch {batch_num}: {e}")
     
     # Create trigger blob for orchestrator
     try:

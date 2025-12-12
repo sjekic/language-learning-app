@@ -14,8 +14,25 @@ interface StoryPageProps {
 }
 
 export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, totalPages, language, onWordHover }) => {
-    // Split content into words to enable individual hover
-    const words = content.split(' ');
+    // Parse content into paragraphs and handle markdown
+    const parseContent = (text: string) => {
+        // Split by double newlines for paragraphs, or periods followed by capital letters
+        const paragraphs = text
+            .split(/\n\n+/)
+            .map(p => p.trim())
+            .filter(p => p.length > 0);
+        
+        return paragraphs.map(paragraph => {
+            // Check if it's a title (surrounded by **)
+            const titleMatch = paragraph.match(/^\*\*(.+?)\*\*$/);
+            if (titleMatch) {
+                return { type: 'title' as const, text: titleMatch[1] };
+            }
+            return { type: 'paragraph' as const, text: paragraph.replace(/\*\*/g, '') };
+        });
+    };
+
+    const parsedContent = parseContent(content);
     const [hoveredWord, setHoveredWord] = React.useState<{ word: string; index: number } | null>(null);
     const [translation, setTranslation] = React.useState<string | null>(null);
     const [translationDetails, setTranslationDetails] = React.useState<TranslationResponse | null>(null);
@@ -33,7 +50,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
 
             setLoading(true);
             // Strip punctuation for better translation
-            const cleanWord = hoveredWord.word.replace(/[.,!?\"]/g, '');
+            const cleanWord = hoveredWord.word.replace(/[.,!?"]/g, '');
 
             try {
                 // Default to translating to English for now, can be made dynamic
@@ -70,7 +87,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const handleSaveWord = () => {
         if (!hoveredWord || !translationDetails) return;
 
-        const cleanWord = hoveredWord.word.replace(/[.,!?\\"]/g, '');
+        const cleanWord = hoveredWord.word.replace(/[.,!?"]/g, '');
 
         saveWord({
             word: cleanWord,
@@ -86,7 +103,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
 
 
     const handleWordClick = (word: string) => {
-        const cleanWord = word.replace(/[.,!?\"]/g, '');
+        const cleanWord = word.replace(/[.,!?"]/g, '');
         onWordHover(cleanWord);
     };
 
@@ -95,47 +112,65 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
             {/* Decorative background element */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-neon-purple/10 rounded-bl-full opacity-50 pointer-events-none" />
 
-            <div className="flex-1">
-                <p className="text-lg md:text-xl leading-relaxed text-gray-100 font-serif relative z-10">
-                    {words.map((word, index) => (
-                        <span
-                            key={index}
-                            className="inline-block mr-1.5 hover:bg-neon-purple/20 hover:text-neon-purple rounded px-0.5 transition-colors cursor-pointer duration-200 relative"
-                            onClick={() => handleWordClick(word)}
-                            onMouseEnter={() => setHoveredWord({ word, index })}
-                            onMouseLeave={() => setHoveredWord(null)}
-                        >
-                            {word}
-                            {/* Translation Tooltip */}
-                            {hoveredWord?.index === index && (
-                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm z-50 shadow-lg backdrop-blur-xl min-w-[200px]">
-                                    <span className="flex items-center justify-between gap-3">
-                                        <span className="text-neon-purple">
-                                            {loading ? 'Translating...' : translation}
-                                        </span>
-                                        {!loading && translationDetails && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleSaveWord();
-                                                }}
-                                                className="p-1 hover:bg-neon-purple/20 rounded transition-colors"
-                                                title={isWordSaved(hoveredWord.word.replace(/[.,!?\\"]/g, ''), language) ? "Already saved" : "Save word"}
-                                            >
-                                                {isWordSaved(hoveredWord.word.replace(/[.,!?\\"]/g, ''), language) || savedWords.has(hoveredWord.word.replace(/[.,!?\\"]/g, '').toLowerCase()) ? (
-                                                    <BookmarkCheck className="w-4 h-4 text-neon-cyan" />
-                                                ) : (
-                                                    <Bookmark className="w-4 h-4 text-gray-400 hover:text-neon-purple" />
-                                                )}
-                                            </button>
+            <div className="flex-1 space-y-6">
+                {parsedContent.map((block, blockIdx) => {
+                    const blockWords = block.text.split(' ');
+                    const wordOffset = parsedContent.slice(0, blockIdx).reduce((acc, b) => acc + b.text.split(' ').length, 0);
+
+                    if (block.type === 'title') {
+                        return (
+                            <h2 key={blockIdx} className="text-2xl md:text-3xl font-bold text-neon-cyan mb-4 relative z-10">
+                                {block.text}
+                            </h2>
+                        );
+                    }
+
+                    return (
+                        <p key={blockIdx} className="text-lg md:text-xl leading-relaxed text-gray-100 font-serif relative z-10">
+                            {blockWords.map((word, wordIdx) => {
+                                const globalIndex = wordOffset + wordIdx;
+                                return (
+                                    <span
+                                        key={`${blockIdx}-${wordIdx}`}
+                                        className="inline-block mr-1.5 hover:bg-neon-purple/20 hover:text-neon-purple rounded px-0.5 transition-colors cursor-pointer duration-200 relative"
+                                        onClick={() => handleWordClick(word)}
+                                        onMouseEnter={() => setHoveredWord({ word, index: globalIndex })}
+                                        onMouseLeave={() => setHoveredWord(null)}
+                                    >
+                                        {word}
+                                        {/* Translation Tooltip */}
+                                        {hoveredWord?.index === globalIndex && (
+                                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-neon-purple/30 rounded-lg text-sm z-50 shadow-lg backdrop-blur-xl min-w-[200px]">
+                                                <span className="flex items-center justify-between gap-3">
+                                                    <span className="text-neon-purple">
+                                                        {loading ? 'Translating...' : translation}
+                                                    </span>
+                                                    {!loading && translationDetails && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleSaveWord();
+                                                            }}
+                                                            className="p-1 hover:bg-neon-purple/20 rounded transition-colors"
+                                                                title={isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) ? "Already saved" : "Save word"}
+                                                            >
+                                                                {isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) || savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? (
+                                                                <BookmarkCheck className="w-4 h-4 text-neon-cyan" />
+                                                            ) : (
+                                                                <Bookmark className="w-4 h-4 text-gray-400 hover:text-neon-purple" />
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </span>
+                                                <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-dark-800"></span>
+                                            </span>
                                         )}
                                     </span>
-                                    <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-dark-800"></span>
-                                </span>
-                            )}
-                        </span>
-                    ))}
-                </p>
+                                );
+                            })}
+                        </p>
+                    );
+                })}
             </div>
 
             <div className="mt-8 flex justify-center">

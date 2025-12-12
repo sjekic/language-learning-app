@@ -48,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, hoveredWord
                         <button
                             onClick={() => setIsOpen(false)}
                             className="lg:hidden p-2 text-gray-400 hover:text-white transition-colors"
+                            aria-label="Close sidebar"
+                            title="Close sidebar"
                         >
                             <ChevronRight className="w-5 h-5" />
                         </button>

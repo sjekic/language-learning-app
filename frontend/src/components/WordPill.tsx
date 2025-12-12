@@ -14,6 +14,8 @@ export const WordPill: React.FC<WordPillProps> = ({ word, onRemove }) => {
                 <button
                     onClick={onRemove}
                     className="ml-2 p-0.5 rounded-full hover:bg-primary-100 text-primary-400 hover:text-primary-600 transition-colors"
+                    aria-label="Remove word"
+                    title="Remove word"
                 >
                     <X className="w-3 h-3" />
                 </button>
