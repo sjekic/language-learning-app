@@ -145,6 +145,33 @@ async def root():
         "cache_size": len(translation_cache)
     }
 
+@app.get("/api/test-linguee")
+async def test_linguee():
+    """Test the Linguee API directly"""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                LINGUEE_API_URL,
+                params={
+                    "query": "hello",
+                    "src": "en",
+                    "dst": "es",
+                    "guess_direction": False
+                }
+            )
+            
+            return {
+                "status_code": response.status_code,
+                "linguee_api_url": LINGUEE_API_URL,
+                "response_preview": response.text[:500] if response.text else "empty",
+                "response_data": response.json() if response.status_code == 200 else None
+            }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "linguee_api_url": LINGUEE_API_URL
+        }
+
 @app.get("/api/translate", response_model=Translation)
 async def translate_word(
     query: str = Query(..., description="Word or phrase to translate"),
@@ -178,43 +205,54 @@ async def translate_word(
             )
             
             if response.status_code != 200:
+                print(f"[LINGUEE API ERROR] Status: {response.status_code}, Response: {response.text}")
                 raise HTTPException(
                     status_code=response.status_code,
                     detail=f"Translation API error: {response.text}"
                 )
             
             data = response.json()
+            print(f"[LINGUEE API RESPONSE] Query: {query}, Response type: {type(data)}, Length: {len(data) if isinstance(data, list) else 'N/A'}")
         
         # Parse Linguee response
+        # The API returns an array of word entries
         translations = []
         examples = []
         
-        if 'exact_matches' in data and len(data['exact_matches']) > 0:
-            for match in data['exact_matches']:
-                if 'translations' in match:
-                    for trans in match['translations']:
+        if isinstance(data, list) and len(data) > 0:
+            print(f"[PARSE] Found {len(data)} word entries")
+            
+            # Iterate through word entries (prioritize featured entries)
+            for entry in data:
+                if 'translations' in entry:
+                    for trans in entry['translations']:
                         if 'text' in trans:
                             translations.append(trans['text'])
-        
-        # Also check 'other_results' if no exact matches
-        if not translations and 'other_results' in data:
-            for result in data['other_results']:
-                if 'translations' in result:
-                    for trans in result['translations']:
-                        if 'text' in trans:
-                            translations.append(trans['text'])
-        
-        # Get example sentences if available
-        if 'examples' in data:
-            for example in data['examples'][:3]:  # Limit to 3 examples
-                examples.append({
-                    'source': example.get('src', ''),
-                    'target': example.get('dst', '')
-                })
+                        
+                        # Collect examples from translations
+                        if 'examples' in trans and trans['examples']:
+                            for example in trans['examples'][:2]:  # Max 2 per translation
+                                if 'src' in example and 'dst' in example:
+                                    examples.append({
+                                        'source': example['src'],
+                                        'target': example['dst']
+                                    })
+                                    if len(examples) >= 3:  # Max 3 total examples
+                                        break
+                        
+                        if len(examples) >= 3:
+                            break
+                
+                # Stop after first entry if we have enough translations
+                if len(translations) >= 5:
+                    break
         
         # Fallback if no translations found
         if not translations:
+            print(f"[PARSE] No translations found. Response preview: {str(data)[:500]}")
             translations = [f"[Translation not found for '{query}']"]
+        else:
+            print(f"[PARSE] Successfully extracted {len(translations)} translations")
         
         result = Translation(
             word=query,
