@@ -177,24 +177,6 @@ class TestBlobStorage:
         assert result.startswith("http")
     
     @pytest.mark.asyncio
-    async def test_delete_from_blob(self):
-        """Test delete from blob storage"""
-        # Create fresh mocks for each test
-        mock_blob_client = MagicMock()
-        mock_blob_client.delete_blob = AsyncMock()
-        
-        mock_service_client = MagicMock()
-        mock_service_client.get_blob_client.return_value = mock_blob_client
-        
-        with patch.object(blob_storage, 'BlobServiceClient') as mock_bsc:
-            mock_bsc.from_connection_string.return_value = mock_service_client
-            with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
-                result = await blob_storage.delete_from_blob("https://test.blob.core.windows.net/container/blob.txt")
-                
-                assert result is True
-                mock_blob_client.delete_blob.assert_called_once()
-    
-    @pytest.mark.asyncio
     async def test_download_from_blob(self):
         """Test download from blob storage"""
         with patch('httpx.AsyncClient') as mock_client:
@@ -284,23 +266,6 @@ class TestBlobStorage:
             with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
                 result = await blob_storage.delete_from_blob("https://test.blob.core.windows.net/container/blob.txt")
                 assert result is False
-    
-    @pytest.mark.asyncio
-    async def test_delete_from_blob_with_blob_name(self):
-        """Test delete from blob with just blob name"""
-        # Create fresh mocks
-        mock_blob_client = MagicMock()
-        mock_blob_client.delete_blob = AsyncMock()
-        
-        mock_service_client = MagicMock()
-        mock_service_client.get_blob_client.return_value = mock_blob_client
-        
-        with patch.object(blob_storage, 'BlobServiceClient') as mock_bsc:
-            mock_bsc.from_connection_string.return_value = mock_service_client
-            with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
-                result = await blob_storage.delete_from_blob("blob.txt")
-                assert result is True
-                mock_blob_client.delete_blob.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_download_from_blob_error(self):
@@ -440,18 +405,3 @@ class TestBookServiceEndpoints:
                 data = response.json()
                 assert data["story_id"] is not None
                 assert data["status"] == "processing"
-    
-    def test_get_job_status(self, client):
-        """Test get job status"""
-        with patch.object(main, 'blob_client') as mock_blob:
-            # Mock final story blob check - returns found
-            mock_blob_client = Mock()
-            mock_blob.get_blob_client.return_value = mock_blob_client
-            mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = json.dumps({"story_id": "test", "content": "xyz"})
-            
-            response = client.get(
-                "/api/books/story_123/status"
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "completed"

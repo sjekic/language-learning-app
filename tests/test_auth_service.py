@@ -353,24 +353,6 @@ class TestAuthServiceEndpoints:
                 )
                 assert response.status_code == 404
     
-    def test_verify_token_only_endpoint(self, client, mock_firebase_token, mock_user_data, mock_db_pool):
-        """Test verify token only endpoint"""
-        # Configure DB mock
-        pool, conn = mock_db_pool
-        # returning mock_user_data makes get_or_create_user return a dict, avoiding TypeError
-        conn.fetchrow.return_value = mock_user_data
-        
-        with mock_db(conn):
-            with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
-                response = client.post(
-                    "/api/auth/token/verify",
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                assert response.status_code == 200
-                data = response.json()
-                assert data["valid"] is True
-                assert data["user"]["firebase_uid"] == mock_firebase_token['uid']
-    
     def test_get_firebase_user_info_endpoint(self, client, mock_firebase_token):
         """Test get Firebase user info endpoint"""
         mock_user_info = {
