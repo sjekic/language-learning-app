@@ -61,7 +61,7 @@ def main():
     final_story = {
         "storyId": story_id,
         "title": manifest.get("title", "Untitled Story"),
-        "coverUrl": cover_url,
+        "coverUrl": None,  # No cover generation (using frontend gradients)
         "language": manifest.get("language"),
         "genre": manifest.get("genre"),
         "readingLevel": manifest.get("readingLevel"),
