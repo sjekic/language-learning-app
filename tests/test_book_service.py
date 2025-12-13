@@ -4,25 +4,62 @@ Unit tests for book-service
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime
 import json
 import sys
 import os
 
-# Mock dependencies before importing modules that use them
-sys.modules['asyncpg'] = MagicMock()
-sys.modules['azure'] = MagicMock()
-sys.modules['azure.storage'] = MagicMock()
-sys.modules['azure.storage.blob'] = MagicMock()
-sys.modules['azure.identity'] = MagicMock()
-sys.modules['azure.mgmt'] = MagicMock()
-sys.modules['azure.mgmt.containerinstance'] = MagicMock()
-sys.modules['azure.mgmt.appcontainers'] = MagicMock()
+# Set dummy env vars for tests (must be before imports)
+os.environ['AZURE_STORAGE_CONNECTION_STRING'] = "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test;EndpointSuffix=core.windows.net"
+os.environ['AZURE_STORAGE_ACCOUNT_NAME'] = "test-account"
+os.environ['AZURE_STORAGE_CONTAINER_NAME'] = "test-container"
+os.environ['AZURE_STORAGE_COVER_CONTAINER'] = "test-covers-container"
+os.environ['AZURE_SUBSCRIPTION_ID'] = "test-sub-id"
+os.environ['AZURE_RESOURCE_GROUP'] = "test-rg"
+os.environ['AZURE_LOCATION'] = "westeurope"
+os.environ['DEV_MODE'] = "false"  # Ensure we test production logic
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'book-service'))
+# Mock dependencies (conditionally to avoid overwriting if shared across tests)
+mocks = [
+    'asyncpg', 'azure', 'azure.storage', 'azure.storage.blob', 
+    'azure.identity', 'azure.mgmt', 'azure.mgmt.containerinstance', 
+    'azure.mgmt.appcontainers'
+]
+for mod in mocks:
+    if mod not in sys.modules or not isinstance(sys.modules[mod], MagicMock):
+        sys.modules[mod] = MagicMock()
+        if mod == 'asyncpg':
+             sys.modules[mod].create_pool = AsyncMock()
 
-from main import app
-import database as book_database
+# Set environment variables BEFORE importing app modules
+import os
+os.environ["DATABASE_URL"] = "postgresql://test:test@localhost/testdb"
+os.environ["FIREBASE_SERVICE_ACCOUNT_KEY"] = '{"type": "service_account", "project_id": "test"}'
+
+import importlib.util
+
+# Load book-service main as a unique module
+book_service_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'book-service')
+sys.path.insert(0, book_service_path)
+
+# Load main.py as book_service_main
+spec = importlib.util.spec_from_file_location("book_service_main", os.path.join(book_service_path, "main.py"))
+book_service_main = importlib.util.module_from_spec(spec)
+sys.modules["book_service_main"] = book_service_main
+spec.loader.exec_module(book_service_main)
+
+# Load database.py
+db_spec = importlib.util.spec_from_file_location("book_service_database", os.path.join(book_service_path, "database.py"))
+book_service_database = importlib.util.module_from_spec(db_spec)
+sys.modules["book_service_database"] = book_service_database
+sys.modules["services.book-service.database"] = book_service_database
+db_spec.loader.exec_module(book_service_database)
+
+from book_service_main import app
+import book_service_main as main # Alias for patch.object convenience
+import book_service_database as book_database
 import blob_storage
 import azure_jobs
 from contextlib import contextmanager
@@ -35,7 +72,7 @@ def mock_db(conn):
     and database.get_db_connection (for cross-module usage).
     """
     print("DEBUG: Entering mock_db")
-    with patch('main.get_db_connection', new_callable=AsyncMock) as mock_main_pool:
+    with patch.object(main, 'get_db_connection', new_callable=AsyncMock) as mock_main_pool:
         mock_main_pool.return_value = conn
         with patch('database.get_db_connection', new_callable=AsyncMock) as mock_db_pool:
             mock_db_pool.return_value = conn
@@ -140,12 +177,22 @@ class TestBlobStorage:
         assert result.startswith("http")
     
     @pytest.mark.asyncio
-    async def test_delete_from_blob(self, mock_azure_blob_service_client):
+    async def test_delete_from_blob(self):
         """Test delete from blob storage"""
-        with patch('azure.storage.blob.BlobServiceClient.from_connection_string', return_value=mock_azure_blob_service_client):
+        # Create fresh mocks for each test
+        mock_blob_client = MagicMock()
+        mock_blob_client.delete_blob = AsyncMock()
+        
+        mock_service_client = MagicMock()
+        mock_service_client.get_blob_client.return_value = mock_blob_client
+        
+        with patch.object(blob_storage, 'BlobServiceClient') as mock_bsc:
+            mock_bsc.from_connection_string.return_value = mock_service_client
             with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
                 result = await blob_storage.delete_from_blob("https://test.blob.core.windows.net/container/blob.txt")
+                
                 assert result is True
+                mock_blob_client.delete_blob.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_download_from_blob(self):
@@ -177,12 +224,23 @@ class TestBlobStorage:
                 assert result is not None
     
     @pytest.mark.asyncio
-    async def test_upload_to_blob_create_container(self, mock_azure_blob_service_client, mock_azure_container_client):
+    async def test_upload_to_blob_create_container(self):
         """Test upload to blob with container creation"""
-        mock_azure_container_client.get_container_properties = AsyncMock(side_effect=Exception("Not found"))
-        mock_azure_container_client.create_container = AsyncMock()
+        # Create fresh mocks
+        mock_container_client = MagicMock()
+        mock_container_client.get_container_properties = AsyncMock(side_effect=Exception("Not found"))
+        mock_container_client.create_container = AsyncMock()
         
-        with patch('azure.storage.blob.BlobServiceClient.from_connection_string', return_value=mock_azure_blob_service_client):
+        mock_blob_client = MagicMock()
+        mock_blob_client.upload_blob = AsyncMock()
+        mock_blob_client.url = "https://test.blob.core.windows.net/container/file.json"
+        
+        mock_service_client = MagicMock()
+        mock_service_client.get_container_client.return_value = mock_container_client
+        mock_service_client.get_blob_client.return_value = mock_blob_client
+        
+        with patch.object(blob_storage, 'BlobServiceClient') as mock_bsc:
+            mock_bsc.from_connection_string.return_value = mock_service_client
             with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
                 result = await blob_storage.upload_to_blob(
                     b"test content",
@@ -190,7 +248,7 @@ class TestBlobStorage:
                     "text/plain"
                 )
                 assert result is not None
-                mock_azure_container_client.create_container.assert_called_once()
+                mock_container_client.create_container.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_upload_to_blob_exception(self, mock_azure_blob_service_client):
@@ -228,12 +286,21 @@ class TestBlobStorage:
                 assert result is False
     
     @pytest.mark.asyncio
-    async def test_delete_from_blob_with_blob_name(self, mock_azure_blob_service_client):
+    async def test_delete_from_blob_with_blob_name(self):
         """Test delete from blob with just blob name"""
-        with patch('azure.storage.blob.BlobServiceClient.from_connection_string', return_value=mock_azure_blob_service_client):
+        # Create fresh mocks
+        mock_blob_client = MagicMock()
+        mock_blob_client.delete_blob = AsyncMock()
+        
+        mock_service_client = MagicMock()
+        mock_service_client.get_blob_client.return_value = mock_blob_client
+        
+        with patch.object(blob_storage, 'BlobServiceClient') as mock_bsc:
+            mock_bsc.from_connection_string.return_value = mock_service_client
             with patch.dict(os.environ, {'AZURE_STORAGE_CONNECTION_STRING': 'test-connection-string'}):
                 result = await blob_storage.delete_from_blob("blob.txt")
                 assert result is True
+                mock_blob_client.delete_blob.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_download_from_blob_error(self):
@@ -356,8 +423,8 @@ class TestBookServiceEndpoints:
     
     def test_generate_book(self, client):
         """Test generate book"""
-        with patch('main.blob_client', Mock()):
-            with patch('main.trigger_container_job', new_callable=AsyncMock) as mock_trigger:
+        with patch.object(main, 'blob_client', Mock()):
+            with patch.object(main, 'trigger_container_job', new_callable=AsyncMock) as mock_trigger:
                 mock_trigger.return_value = "test-job-id"
                 
                 response = client.post(
@@ -376,7 +443,7 @@ class TestBookServiceEndpoints:
     
     def test_get_job_status(self, client):
         """Test get job status"""
-        with patch('main.blob_client') as mock_blob:
+        with patch.object(main, 'blob_client') as mock_blob:
             # Mock final story blob check - returns found
             mock_blob_client = Mock()
             mock_blob.get_blob_client.return_value = mock_blob_client
