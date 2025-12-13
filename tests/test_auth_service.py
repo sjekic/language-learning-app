@@ -9,23 +9,56 @@ from datetime import datetime
 import sys
 import os
 
-# Mock dependencies before importing modules that use them
-sys.modules['asyncpg'] = MagicMock()
-sys.modules['firebase_admin'] = MagicMock()
-sys.modules['firebase_admin.credentials'] = MagicMock()
-sys.modules['firebase_admin.auth'] = MagicMock()
+# Set dummy env vars for tests (must be before imports)
+os.environ['DATABASE_URL'] = "postgresql://test:test@localhost/test"
+os.environ['FIREBASE_SERVICE_ACCOUNT_KEY'] = '{"type": "service_account"}'
 
-# Add services to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'auth-service'))
+# Mock dependencies (conditionally to avoid overwriting if shared across tests)
+for mod in ['asyncpg', 'firebase_admin', 'firebase_admin.credentials', 'firebase_admin.auth']:
+    if mod not in sys.modules or not isinstance(sys.modules[mod], MagicMock):
+        sys.modules[mod] = MagicMock()
+        if mod == 'asyncpg':
+             sys.modules[mod].create_pool = AsyncMock()
 
-from main import app, get_or_create_user, verify_auth_header
-import database as auth_database
+# Set environment variables BEFORE importing app modules ensures they pass validation
+import os
+os.environ["DATABASE_URL"] = "postgresql://test:test@localhost/testdb"
+os.environ["FIREBASE_SERVICE_ACCOUNT_KEY"] = '{"type": "service_account", "project_id": "test"}'
+
+import importlib.util
+
+# Load auth-service main as a unique module to avoid collision with book-service main
+auth_service_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'auth-service')
+sys.path.insert(0, auth_service_path)
+
+# Load main.py as auth_service_main
+spec = importlib.util.spec_from_file_location("auth_service_main", os.path.join(auth_service_path, "main.py"))
+auth_service_main = importlib.util.module_from_spec(spec)
+sys.modules["auth_service_main"] = auth_service_main
+spec.loader.exec_module(auth_service_main)
+
+# Load database.py from auth-service
+db_spec = importlib.util.spec_from_file_location("auth_service_database", os.path.join(auth_service_path, "database.py"))
+auth_service_database = importlib.util.module_from_spec(db_spec)
+sys.modules["auth_service_database"] = auth_service_database # Register using the local import name
+sys.modules["services.auth-service.database"] = auth_service_database # Also register full path if needed
+db_spec.loader.exec_module(auth_service_database)
+
+# Import from the loaded module
+from auth_service_main import app, get_or_create_user, verify_auth_header
+import auth_service_main as main # Alias for patch.object convenience
+import auth_service_database as auth_database # Alias for test usage
 import firebase_config
 from contextlib import contextmanager
 
+from dotenv import load_dotenv
+load_dotenv()
+
 @contextmanager
 def mock_db(conn):
-    with patch('main.get_db_connection', new_callable=AsyncMock) as mock_get:
+    # main.py calls `conn = await get_db_connection()` and then `conn.fetchrow(...)` directly
+    # So get_db_connection should return the connection object (not a pool that needs acquire)
+    with patch.object(main, 'get_db_connection', new_callable=AsyncMock) as mock_get:
         mock_get.return_value = conn
         yield mock_get
 
@@ -33,7 +66,12 @@ def mock_db(conn):
 @pytest.fixture
 def client():
     """Create test client"""
-    return TestClient(app)
+    # Simply set the env var to satisfy validation. 
+    # Global asyncpg mock handles the actual connection creation.
+    os.environ["DATABASE_URL"] = "postgresql://test:test@localhost/test"
+    
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture
@@ -41,7 +79,7 @@ def mock_db_connection(mock_db_pool):
     """Mock database connection"""
     pool, conn = mock_db_pool
     with patch('services.auth-service.database.get_db_connection', return_value=pool):
-        with patch('services.auth-service.main.get_db_connection', return_value=pool):
+        with patch.object(main, 'get_db_connection', return_value=pool):
             yield pool, conn
 
 
@@ -247,7 +285,7 @@ class TestAuthServiceEndpoints:
     @pytest.mark.asyncio
     async def test_verify_auth_header_success(self, mock_firebase_token):
         """Test successful auth header verification"""
-        with patch('main.verify_firebase_token', return_value=mock_firebase_token):
+        with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
             result = await verify_auth_header("Bearer valid-token")
             assert result == mock_firebase_token
     
@@ -261,15 +299,15 @@ class TestAuthServiceEndpoints:
     @pytest.mark.asyncio
     async def test_verify_auth_header_invalid_token(self):
         """Test auth header with invalid token"""
-        with patch('main.verify_firebase_token', side_effect=ValueError("Invalid token")):
+        with patch.object(main, 'verify_firebase_token', side_effect=ValueError("Invalid token")):
             with pytest.raises(HTTPException) as exc_info:
                 await verify_auth_header("Bearer invalid-token")
             assert exc_info.value.status_code == 401
     
     def test_verify_and_sync_user_endpoint(self, client, mock_firebase_token):
         """Test verify and sync user endpoint"""
-        with patch('main.verify_firebase_token', return_value=mock_firebase_token):
-            with patch('main.get_or_create_user', new_callable=AsyncMock) as mock_get_user:
+        with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
+            with patch.object(main, 'get_or_create_user', new_callable=AsyncMock) as mock_get_user:
                 mock_get_user.return_value = {
                     'id': 1,
                     'firebase_uid': mock_firebase_token['uid'],
@@ -289,7 +327,7 @@ class TestAuthServiceEndpoints:
     
     def test_get_current_user_endpoint(self, client, mock_firebase_token, mock_user_data, mock_db_pool):
         """Test get current user endpoint"""
-        with patch('main.verify_auth_header', new_callable=AsyncMock) as mock_verify:
+        with patch.object(main, 'verify_auth_header', new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = mock_firebase_token
             pool, conn = mock_db_pool
             conn.fetchrow = AsyncMock(return_value=mock_user_data)
@@ -304,7 +342,7 @@ class TestAuthServiceEndpoints:
     
     def test_get_current_user_not_found(self, client, mock_firebase_token, mock_db_pool):
         """Test get current user when user not found"""
-        with patch('main.verify_auth_header', new_callable=AsyncMock) as mock_verify:
+        with patch.object(main, 'verify_auth_header', new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = mock_firebase_token
             pool, conn = mock_db_pool
             conn.fetchrow = AsyncMock(return_value=None)
@@ -315,55 +353,43 @@ class TestAuthServiceEndpoints:
                 )
                 assert response.status_code == 404
     
-    def test_verify_token_only_endpoint(self, client, mock_firebase_token):
+    def test_verify_token_only_endpoint(self, client, mock_firebase_token, mock_user_data, mock_db_pool):
         """Test verify token only endpoint"""
-        from main import verify_auth_header
+        # Configure DB mock
+        pool, conn = mock_db_pool
+        # returning mock_user_data makes get_or_create_user return a dict, avoiding TypeError
+        conn.fetchrow.return_value = mock_user_data
         
-        async def mock_verify_override(authorization: str = None):
-            return mock_firebase_token
-            
-        app.dependency_overrides[verify_auth_header] = mock_verify_override
-        
-        try:
-            response = client.post(
-                "/api/auth/token/verify",
-                headers={"Authorization": "Bearer test-token"}
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["valid"] is True
-            assert data["user"]["firebase_uid"] == mock_firebase_token['uid']
-        finally:
-            app.dependency_overrides.clear()
+        with mock_db(conn):
+            with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
+                response = client.post(
+                    "/api/auth/token/verify",
+                    headers={"Authorization": "Bearer test-token"}
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["valid"] is True
+                assert data["user"]["firebase_uid"] == mock_firebase_token['uid']
     
     def test_get_firebase_user_info_endpoint(self, client, mock_firebase_token):
         """Test get Firebase user info endpoint"""
-        from main import verify_auth_header
-        
         mock_user_info = {
             'uid': 'test-firebase-uid-123',
             'email': 'test@example.com',
             'email_verified': True
         }
         
-        async def mock_verify_override(authorization: str = None):
-            return mock_firebase_token
-            
-        app.dependency_overrides[verify_auth_header] = mock_verify_override
-        
-        try:
-            with patch('main.get_firebase_user', return_value=mock_user_info):
+        with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
+            with patch.object(main, 'get_firebase_user', return_value=mock_user_info):
                 response = client.get(
                     "/api/auth/firebase-user/test-firebase-uid-123",
                     headers={"Authorization": "Bearer test-token"}
                 )
                 assert response.status_code == 200
-        finally:
-            app.dependency_overrides.clear()
     
     def test_get_firebase_user_info_forbidden(self, client, mock_firebase_token):
         """Test get Firebase user info for different user"""
-        with patch('main.verify_auth_header', new_callable=AsyncMock) as mock_verify:
+        with patch.object(main, 'verify_auth_header', new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = mock_firebase_token
             
             response = client.get(
@@ -388,7 +414,7 @@ class TestAuthServiceEndpoints:
         token_without_email = mock_firebase_token.copy()
         token_without_email.pop('email')
         
-        with patch('main.verify_firebase_token', return_value=token_without_email):
+        with patch.object(main, 'verify_firebase_token', return_value=token_without_email):
             client = TestClient(app)
             response = client.post(
                 "/api/auth/verify",
@@ -399,7 +425,7 @@ class TestAuthServiceEndpoints:
     @pytest.mark.asyncio
     async def test_verify_and_sync_user_exception(self):
         """Test verify and sync user with exception"""
-        with patch('main.verify_firebase_token', side_effect=Exception("Unexpected error")):
+        with patch.object(main, 'verify_firebase_token', side_effect=Exception("Unexpected error")):
             client = TestClient(app)
             response = client.post(
                 "/api/auth/verify",
@@ -413,7 +439,7 @@ class TestAuthServiceEndpoints:
         pool, conn = mock_db_pool
         conn.fetchrow = AsyncMock(side_effect=Exception("Database error"))
         
-        with patch('main.verify_auth_header', new_callable=AsyncMock) as mock_verify:
+        with patch.object(main, 'verify_auth_header', new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = mock_firebase_token
             with mock_db(conn):
                 client = TestClient(app)
@@ -426,28 +452,19 @@ class TestAuthServiceEndpoints:
     @pytest.mark.asyncio
     async def test_get_firebase_user_info_exception(self, mock_firebase_token):
         """Test get Firebase user info with exception"""
-        from main import verify_auth_header
-        
-        async def mock_verify_override(authorization: str = None):
-            return mock_firebase_token
-            
-        app.dependency_overrides[verify_auth_header] = mock_verify_override
-        
-        try:
-            with patch('main.get_firebase_user', side_effect=ValueError("User not found")):
+        with patch.object(main, 'verify_firebase_token', return_value=mock_firebase_token):
+            with patch.object(main, 'get_firebase_user', side_effect=ValueError("User not found")):
                 client = TestClient(app)
                 response = client.get(
                     "/api/auth/firebase-user/test-firebase-uid-123",
                     headers={"Authorization": "Bearer test-token"}
                 )
                 assert response.status_code == 404
-        finally:
-            app.dependency_overrides.clear()
     
     @pytest.mark.asyncio
     async def test_verify_auth_header_exception(self):
         """Test verify auth header with general exception"""
-        with patch('main.verify_firebase_token', side_effect=Exception("Unexpected error")):
+        with patch.object(main, 'verify_firebase_token', side_effect=Exception("Unexpected error")):
             with pytest.raises(HTTPException) as exc_info:
                 await verify_auth_header("Bearer invalid-token")
             assert exc_info.value.status_code == 401
