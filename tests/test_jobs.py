@@ -88,18 +88,21 @@ class TestChunkJobs:
         mock_blob = Mock()
         mock_blob.name = "trigger"
         mock_blob_client = Mock()
+        # Mock legacy trigger format for simplicity, or full format
         mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = json.dumps({"story_id": "s1", "chunk_id": 1}).encode()
         
         with patch('chunk_jobs.BlobServiceClient') as mock_service:
             mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
             mock_service.from_connection_string.return_value.get_blob_client.return_value = mock_blob_client
             with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-                s_id, c_id = chunk_jobs.get_params_from_trigger()
+                s_id, b_id, c_start, c_end = chunk_jobs.get_params_from_trigger()
                 assert s_id == "s1"
-                assert c_id == 1
+                assert b_id == 1
+                assert c_start == 1
+                assert c_end == 1
 
     def test_main(self):
-        with patch('chunk_jobs.get_params_from_trigger', return_value=("story_id", 1)):
+        with patch('chunk_jobs.get_params_from_trigger', return_value=("story_id", 1, 1, 1)):
             with patch('chunk_jobs.download_text', side_effect=[
                 json.dumps({"storyId": "s1", "readingLevel": "A1", "genre": "g", "language": "l", "title": "Test Title", "chapters": [{"title": "c1", "summary": "s1"}]}), # manifest
                 json.dumps({"characters": []}) # story_bible
