@@ -1,6 +1,20 @@
 """
 Shared pytest fixtures and utilities for all tests
 """
+import os
+
+# Set test environment variables FIRST - before any module imports
+# These are required for service modules like database.py to pass validation
+# The values don't matter because asyncpg/Azure are mocked - they just need to exist
+os.environ.setdefault('DATABASE_URL', 'postgresql://test:test@localhost/test')
+os.environ.setdefault('FIREBASE_SERVICE_ACCOUNT_KEY', '{"type": "service_account", "project_id": "test"}')
+os.environ.setdefault('AZURE_STORAGE_CONNECTION_STRING', 'DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test;EndpointSuffix=core.windows.net')
+os.environ.setdefault('AZURE_STORAGE_ACCOUNT_NAME', 'test-account')
+os.environ.setdefault('AZURE_STORAGE_CONTAINER_NAME', 'test-container')
+os.environ.setdefault('AZURE_STORAGE_COVER_CONTAINER', 'test-covers')
+os.environ.setdefault('AUTH_SERVICE_URL', 'http://auth-service')
+os.environ.setdefault('DEV_MODE', 'true')
+
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, MagicMock, patch
