@@ -9,18 +9,40 @@ from datetime import datetime
 import sys
 import os
 
+# Set dummy env vars for tests (must be before imports)
+os.environ['DATABASE_URL'] = "postgresql://test:test@localhost/test"
+os.environ['FIREBASE_SERVICE_ACCOUNT_KEY'] = '{"type": "service_account"}'
+
 # Mock asyncpg before importing modules that use it
 sys.modules['asyncpg'] = MagicMock()
+sys.modules['asyncpg'].create_pool = AsyncMock()
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'user-service'))
+import importlib.util
 
-from main import app
-import database as user_database
+# Load user-service modules in correct order with UNIQUE names
+user_service_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'user-service')
+sys.path.insert(0, user_service_path)
+
+# IMPORTANT: Load database.py FIRST and register with unique name
+db_spec = importlib.util.spec_from_file_location("user_service_database", os.path.join(user_service_path, "database.py"))
+user_service_database = importlib.util.module_from_spec(db_spec)
+sys.modules["user_service_database"] = user_service_database
+db_spec.loader.exec_module(user_service_database)
+
+# NOW load main.py with unique name  
+spec = importlib.util.spec_from_file_location("user_service_main", os.path.join(user_service_path, "main.py"))
+user_service_main = importlib.util.module_from_spec(spec)
+sys.modules["user_service_main"] = user_service_main
+spec.loader.exec_module(user_service_main)
+
+from user_service_main import app
+import user_service_main as main  # Alias for patch.object convenience
+import user_service_database as user_database
 from contextlib import contextmanager
 
 @contextmanager
 def mock_db(conn):
-    with patch('main.get_db_connection', new_callable=AsyncMock) as mock_get:
+    with patch.object(main, 'get_db_connection', new_callable=AsyncMock) as mock_get:
         mock_get.return_value = conn
         yield mock_get
 
@@ -28,7 +50,7 @@ def mock_db(conn):
 @pytest.fixture
 def client(mock_auth_response):
     """Create test client"""
-    from main import verify_token
+    from user_service_main import verify_token
     
     # Override the verify_token dependency for all tests
     async def mock_verify_token_override(authorization: str = None):
@@ -163,10 +185,10 @@ class TestUserServiceEndpoints:
         conn.fetchrow = AsyncMock(return_value=updated_user)
         conn.execute = AsyncMock()
         
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
+        with patch.object(main, 'verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
             with mock_db(conn):
                 # Mock the get_current_user_profile function that's called at the end
-                with patch('main.get_current_user_profile', new_callable=AsyncMock) as mock_get_profile:
+                with patch.object(main, 'get_current_user_profile', new_callable=AsyncMock) as mock_get_profile:
                     mock_get_profile.return_value = {
                         'id': 1,
                         'email': 'test@example.com',
@@ -184,7 +206,7 @@ class TestUserServiceEndpoints:
     def test_update_user_profile_no_fields(self, client, mock_auth_response, mock_db_pool):
         """Test update user profile with no fields"""
         pool, conn = mock_db_pool
-        with patch('main.verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
+        with patch.object(main, 'verify_token', new_callable=AsyncMock, return_value=mock_auth_response):
             with mock_db(conn):
                 response = client.put(
                     "/api/users/me",
@@ -239,7 +261,7 @@ class TestUserServiceEndpoints:
     def test_verify_token_service_unavailable(self, client, mock_db_pool):
         """Test verify token when auth service is unavailable"""
         import httpx
-        from main import verify_token
+        from user_service_main import verify_token
         
         # Remove dependency override to test the real verify_token function
         app.dependency_overrides.pop(verify_token, None)

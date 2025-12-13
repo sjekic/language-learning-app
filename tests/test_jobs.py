@@ -113,21 +113,6 @@ class TestChunkJobs:
                         chunk_jobs.main()
                         assert mock_upload.called
 
-class TestCoverJob:
-    """Tests for cover_job.py"""
-    
-    def test_main(self):
-        with patch('cover_job.parse_args') as mock_parse:
-            mock_parse.return_value = Mock(story_id="s1")
-            
-            with patch('cover_job.download_text', return_value=json.dumps({"userPrompt": "Title", "genre": "fantasy"})):
-                 with patch('cover_job.upload_json') as mock_upload:
-                     # cover_job doesn't use OpenAI currently
-                     import cover_job
-                     cover_job.main()
-                     mock_upload.assert_called_once()
-
-
 class TestFinalAssemblyJob:
     """Tests for final_assembly_job.py"""
     

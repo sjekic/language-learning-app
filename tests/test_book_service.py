@@ -40,25 +40,25 @@ os.environ["FIREBASE_SERVICE_ACCOUNT_KEY"] = '{"type": "service_account", "proje
 
 import importlib.util
 
-# Load book-service main as a unique module
+# Load book-service modules in correct order
 book_service_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'book-service')
 sys.path.insert(0, book_service_path)
 
-# Load main.py as book_service_main
+# IMPORTANT: Load database.py FIRST and register it as 'database' so main.py can import it
+db_spec = importlib.util.spec_from_file_location("database", os.path.join(book_service_path, "database.py"))
+book_service_database = importlib.util.module_from_spec(db_spec)
+sys.modules["database"] = book_service_database  # Register as 'database' so main.py can import it
+sys.modules["book_service_database"] = book_service_database  # Also register with full name
+db_spec.loader.exec_module(book_service_database)
+
+# NOW load main.py (it will find 'database' in sys.modules)
 spec = importlib.util.spec_from_file_location("book_service_main", os.path.join(book_service_path, "main.py"))
 book_service_main = importlib.util.module_from_spec(spec)
 sys.modules["book_service_main"] = book_service_main
 spec.loader.exec_module(book_service_main)
 
-# Load database.py
-db_spec = importlib.util.spec_from_file_location("book_service_database", os.path.join(book_service_path, "database.py"))
-book_service_database = importlib.util.module_from_spec(db_spec)
-sys.modules["book_service_database"] = book_service_database
-sys.modules["services.book-service.database"] = book_service_database
-db_spec.loader.exec_module(book_service_database)
-
 from book_service_main import app
-import book_service_main as main # Alias for patch.object convenience
+import book_service_main as main  # Alias for patch.object convenience
 import book_service_database as book_database
 import blob_storage
 import azure_jobs

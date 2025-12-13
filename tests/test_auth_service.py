@@ -27,27 +27,27 @@ os.environ["FIREBASE_SERVICE_ACCOUNT_KEY"] = '{"type": "service_account", "proje
 
 import importlib.util
 
-# Load auth-service main as a unique module to avoid collision with book-service main
+# Load auth-service modules in correct order
 auth_service_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'auth-service')
 sys.path.insert(0, auth_service_path)
 
-# Load main.py as auth_service_main
+# IMPORTANT: Load database.py FIRST and register it as 'database' so main.py can import it
+db_spec = importlib.util.spec_from_file_location("database", os.path.join(auth_service_path, "database.py"))
+auth_service_database = importlib.util.module_from_spec(db_spec)
+sys.modules["database"] = auth_service_database  # Register as 'database' so main.py can import it
+sys.modules["auth_service_database"] = auth_service_database  # Also register with full name
+db_spec.loader.exec_module(auth_service_database)
+
+# NOW load main.py (it will find 'database' in sys.modules)
 spec = importlib.util.spec_from_file_location("auth_service_main", os.path.join(auth_service_path, "main.py"))
 auth_service_main = importlib.util.module_from_spec(spec)
 sys.modules["auth_service_main"] = auth_service_main
 spec.loader.exec_module(auth_service_main)
 
-# Load database.py from auth-service
-db_spec = importlib.util.spec_from_file_location("auth_service_database", os.path.join(auth_service_path, "database.py"))
-auth_service_database = importlib.util.module_from_spec(db_spec)
-sys.modules["auth_service_database"] = auth_service_database # Register using the local import name
-sys.modules["services.auth-service.database"] = auth_service_database # Also register full path if needed
-db_spec.loader.exec_module(auth_service_database)
-
 # Import from the loaded module
 from auth_service_main import app, get_or_create_user, verify_auth_header
-import auth_service_main as main # Alias for patch.object convenience
-import auth_service_database as auth_database # Alias for test usage
+import auth_service_main as main  # Alias for patch.object convenience
+import auth_service_database as auth_database  # Alias for test usage
 import firebase_config
 from contextlib import contextmanager
 
