@@ -132,9 +132,17 @@ async def verify_token(authorization: str = Header(...)) -> dict:
             )
             
             if response.status_code != 200:
+                # Bubble up auth-service details to make debugging much easier (e.g. Firebase not configured).
+                detail: str
+                try:
+                    payload = response.json()
+                    detail = payload.get("detail") if isinstance(payload, dict) else str(payload)
+                except Exception:
+                    detail = response.text or f"Auth verification failed (HTTP {response.status_code})"
+
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired token"
+                    status_code=response.status_code if response.status_code in (401, 403, 503) else status.HTTP_401_UNAUTHORIZED,
+                    detail=detail
                 )
             
             data = response.json()

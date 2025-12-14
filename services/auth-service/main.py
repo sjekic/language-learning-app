@@ -104,6 +104,14 @@ async def verify_auth_header(authorization: str = Header(...)) -> dict:
     Returns Firebase user data
     """
     try:
+        # Ensure Firebase is initialized. If credentials are missing in Container Apps,
+        # return a clear 503 (this would otherwise show up as confusing 401s elsewhere).
+        if initialize_firebase() is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Firebase Admin SDK is not configured (missing FIREBASE_SERVICE_ACCOUNT_KEY/PATH)"
+            )
+
         # Extract token from "Bearer <token>"
         if not authorization.startswith("Bearer "):
             raise HTTPException(
