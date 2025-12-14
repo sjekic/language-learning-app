@@ -33,17 +33,27 @@ app = FastAPI(
 )
 
 # CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Local development
-        "http://localhost:3000",  # Alternative local dev port
-        "https://frontend.victoriousbay-46f7c8cf.westeurope.azurecontainerapps.io",  # Production frontend
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Browsers will preflight requests that include Authorization headers or non-simple content-types.
+# In Container Apps, the frontend FQDN can change if the app is recreated, so we default to a permissive
+# origin regex and allow overriding via env vars.
+#
+# - Set CORS_ORIGINS="https://your-frontend.example,https://another-origin" to restrict explicitly.
+# - Otherwise, we allow any origin (typical for coursework/internal environments).
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").strip()
+origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+
+cors_kwargs = {
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+    # We do not rely on cookies; tokens are passed via Authorization header.
+    # Setting allow_credentials=False also allows "*" / regex origins safely.
+    "allow_credentials": False,
+}
+
+if origins:
+    app.add_middleware(CORSMiddleware, allow_origins=origins, **cors_kwargs)
+else:
+    app.add_middleware(CORSMiddleware, allow_origin_regex=".*", **cors_kwargs)
 
 # ==========================================
 # Pydantic Models
