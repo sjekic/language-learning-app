@@ -4,6 +4,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
 from contextlib import asynccontextmanager
+import os
 
 from database import get_db_connection, close_db_connection
 from firebase_config import initialize_firebase, verify_firebase_token, get_firebase_user
@@ -12,7 +13,10 @@ from firebase_config import initialize_firebase, verify_firebase_token, get_fire
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await get_db_connection()
+    # Don't hard-block startup on DB connection; during cold start this can cause long delays.
+    # If you want to pre-warm DB connections, set PRECONNECT_DB=true.
+    if os.getenv("PRECONNECT_DB", "false").strip().lower() in ("1", "true", "yes", "y", "on"):
+        await get_db_connection()
     initialize_firebase()
     yield
     # Shutdown

@@ -4,10 +4,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Load environment variables from root .env/.env.local (works no matter where you run from)
-_ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(_ROOT_DIR / ".env", override=False)
-load_dotenv(_ROOT_DIR / ".env.local", override=False)
+# Load environment variables from local `.env` / `.env.local` if present.
+# In containers the app usually runs from `/app`, so paths like `parents[2]`
+# can break (IndexError). Container Apps should primarily use real env vars / secrets.
+_HERE = Path(__file__).resolve().parent
+load_dotenv(_HERE / ".env", override=False)
+load_dotenv(_HERE / ".env.local", override=False)
 
 # Database connection pool
 pool: Optional[asyncpg.Pool] = None
@@ -25,11 +27,15 @@ async def get_db_connection() -> asyncpg.Pool:
                 "Please create a .env file with DATABASE_URL or set it in your environment."
             )
         
+        # Keep min_size small to avoid creating multiple connections during a cold start.
+        # Also set an explicit connect timeout so we fail fast instead of hanging until ACA gateway 504.
+        connect_timeout = float(os.getenv("DB_POOL_CONNECT_TIMEOUT_SECONDS", "10"))
         pool = await asyncpg.create_pool(
             database_url,
-            min_size=2,
-            max_size=10,
-            command_timeout=60
+            min_size=int(os.getenv("DB_POOL_MIN_SIZE", "1")),
+            max_size=int(os.getenv("DB_POOL_MAX_SIZE", "10")),
+            command_timeout=float(os.getenv("DB_COMMAND_TIMEOUT_SECONDS", "60")),
+            timeout=connect_timeout,
         )
     
     return pool
