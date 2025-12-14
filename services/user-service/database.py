@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # Load environment variables from root .env/.env.local (works no matter where you run from)
-_ROOT_DIR = Path(__file__).resolve().parents[2]
+_ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(_ROOT_DIR / ".env", override=False)
 load_dotenv(_ROOT_DIR / ".env.local", override=False)
 
