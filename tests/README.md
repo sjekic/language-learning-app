@@ -47,6 +47,9 @@ pytest --cov=services/book-service tests/test_book_service.py -v
 
 # Background Jobs
 pytest --cov=jobs/src tests/test_jobs.py -v
+
+# Integration (cross-service, in-memory)
+./venv/bin/python -m pytest tests/test_integration_services.py -v --no-cov
 ```
 
 ## Coverage Reports
@@ -67,9 +70,9 @@ pytest --cov-fail-under=70 --cov=services/auth-service tests/test_auth_service.p
 - `tests/test_translation_service.py`: Translation API & caching
 - `tests/test_book_service.py`: Book generation API & Azure storage integration
 - `tests/test_jobs.py`: Background job processing logic
+- `tests/test_integration_services.py`: Auth → translation (vocab) → user flow using shared in-memory fakes (run with --no-cov)
 
 ## Mocks & Isolation
 
 - **Database**: We use `mock_db` context managers and `asyncpg` mocks to simulate database operations without a real Postgres instance.
 - **External APIs**: Calls to Azure, Firebase, and Translation APIs are mocked to ensure tests are fast, reliable, and cost-free.
-
