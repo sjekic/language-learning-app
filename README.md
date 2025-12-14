@@ -2,6 +2,10 @@
 
 A full-stack language learning application that generates personalized AI stories in multiple languages, helping users learn through immersive reading experiences.
 
+## 🚀 Live Demo
+
+**Access the application:** [https://frontend.victoriousbay-46f7c8cf.westeurope.azurecontainerapps.io/](https://frontend.victoriousbay-46f7c8cf.westeurope.azurecontainerapps.io/)
+
 ## 🌟 Features
 
 - **AI Story Generation**: Generate custom stories in 6+ languages (Spanish, French, German, Italian, Japanese, Chinese)
