@@ -24,12 +24,16 @@ async def get_db_connection() -> asyncpg.Pool:
                 "DATABASE_URL environment variable is not set. "
                 "Please create a .env file with DATABASE_URL or set it in your environment."
             )
-        
+
+        # Keep min_size small to avoid creating multiple connections during a cold start.
+        # Also set an explicit connect timeout so we fail fast instead of hanging until ACA gateway 504.
+        connect_timeout = float(os.getenv("DB_POOL_CONNECT_TIMEOUT_SECONDS", "10"))
         pool = await asyncpg.create_pool(
             database_url,
-            min_size=2,
-            max_size=10,
-            command_timeout=60
+            min_size=int(os.getenv("DB_POOL_MIN_SIZE", "1")),
+            max_size=int(os.getenv("DB_POOL_MAX_SIZE", "10")),
+            command_timeout=float(os.getenv("DB_COMMAND_TIMEOUT_SECONDS", "60")),
+            timeout=connect_timeout,
         )
     
     return pool

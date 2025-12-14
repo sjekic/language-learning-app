@@ -219,6 +219,7 @@ jobs:
           az containerapp update \
             --name auth-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
+            --min-replicas 1 \
             --container-name "$CONTAINER_NAME" \
             --image ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }} \
             --set-env-vars \
@@ -317,6 +318,7 @@ jobs:
           az containerapp update \
             --name translation-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
+            --min-replicas 1 \
             --container-name "$CONTAINER_NAME" \
             --image ${{ env.ACR_LOGIN_SERVER }}/translation-service:${{ github.sha }} \
             --set-env-vars \

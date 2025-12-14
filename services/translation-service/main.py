@@ -17,10 +17,25 @@ LINGUEE_API_URL = os.getenv("LINGUEE_API_URL", "https://linguee-api.fly.dev/api/
 # Translation cache (TTL: 1 hour, max 1000 entries)
 translation_cache = TTLCache(maxsize=1000, ttl=3600)
 
+# Auth verification cache (reduces per-request latency + load on auth-service)
+# Keep TTL short so expired/revoked tokens don't linger long.
+auth_verify_cache = TTLCache(
+    maxsize=int(os.getenv("AUTH_VERIFY_CACHE_MAXSIZE", "5000")),
+    ttl=int(os.getenv("AUTH_VERIFY_CACHE_TTL_SECONDS", "30")),
+)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await get_db_connection()
+    #
+    # Important: do NOT force a DB connection on startup.
+    # Azure Container Apps may cold-start (scale-from-zero) and if Postgres/DNS is slow,
+    # this can delay *all* endpoints (including /api/translate which doesn't need the DB)
+    # by up to minutes.
+    #
+    # If you really want to pre-warm DB connections, set PRECONNECT_DB=true.
+    if os.getenv("PRECONNECT_DB", "false").strip().lower() in ("1", "true", "yes", "y", "on"):
+        await get_db_connection()
     yield
     # Shutdown
     await close_db_connection()
@@ -103,8 +118,14 @@ async def verify_token(authorization: str = Header(...)) -> dict:
             )
         
         token = authorization.split(" ")[1]
-        
-        async with httpx.AsyncClient() as client:
+
+        cached = auth_verify_cache.get(token)
+        if cached is not None:
+            return cached
+
+        # IMPORTANT: always use a timeout so we don't hang for minutes and trigger ACA gateway 504s.
+        auth_timeout = float(os.getenv("AUTH_VERIFY_TIMEOUT_SECONDS", "5"))
+        async with httpx.AsyncClient(timeout=auth_timeout) as client:
             response = await client.post(
                 f"{AUTH_SERVICE_URL}/api/auth/token/verify",
                 headers={"Authorization": f"Bearer {token}"}
@@ -116,8 +137,15 @@ async def verify_token(authorization: str = Header(...)) -> dict:
                     detail="Invalid or expired token"
                 )
             
-            return response.json()
+            data = response.json()
+            auth_verify_cache[token] = data
+            return data
     
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service timeout"
+        )
     except httpx.HTTPError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
