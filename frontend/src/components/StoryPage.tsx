@@ -39,11 +39,6 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
     const [loading, setLoading] = React.useState(false);
     const [savedWords, setSavedWords] = React.useState<Set<string>>(new Set());
 
-    // Helper function to check if a word is already saved
-    const isWordSaved = (word: string, _language: string) => {
-        return savedWords.has(word.toLowerCase());
-    };
-
     // Prefetch saved vocabulary words so the UI can show "saved" state without blocking renders.
     React.useEffect(() => {
         let mounted = true;
@@ -219,9 +214,9 @@ export const StoryPage: React.FC<StoryPageProps> = ({ content, pageNumber, total
                                                                 handleSaveWord();
                                                             }}
                                                             className="p-1 hover:bg-neon-purple/20 rounded transition-colors"
-                                                                title={isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) ? "Already saved" : "Save word"}
+                                                                title={savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? "Already saved" : "Save word"}
                                                             >
-                                                                {isWordSaved(hoveredWord.word.replace(/[.,!?"]/g, ''), language) || savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? (
+                                                                {savedWords.has(hoveredWord.word.replace(/[.,!?"]/g, '').toLowerCase()) ? (
                                                                 <BookmarkCheck className="w-4 h-4 text-neon-cyan" />
                                                             ) : (
                                                                 <Bookmark className="w-4 h-4 text-gray-400 hover:text-neon-purple" />
