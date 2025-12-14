@@ -20,7 +20,11 @@ app = FastAPI(title="Book Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",  # Local development
+        "http://localhost:3000",  # Alternative local dev port
+        "https://frontend.victoriousbay-46f7c8cf.westeurope.azurecontainerapps.io",  # Production frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

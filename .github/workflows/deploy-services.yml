@@ -6,8 +6,10 @@ on:
       - main
       - featre/implementing-cloud-services
       - ci-cd-integration
+      - feature/containerizing-frontend
     paths:
       - 'services/**'
+      - 'frontend/**'
       - 'jobs/**'
       - '.github/workflows/**'
   workflow_dispatch:  # Allow manual triggering
@@ -28,6 +30,8 @@ jobs:
       book-service: ${{ steps.filter.outputs.book-service }}
       translation-service: ${{ steps.filter.outputs.translation-service }}
       user-service: ${{ steps.filter.outputs.user-service }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      jobs: ${{ steps.filter.outputs.jobs }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -45,6 +49,8 @@ jobs:
               - 'services/translation-service/**'
             user-service:
               - 'services/user-service/**'
+            frontend:
+              - 'frontend/**'
             jobs:
               - 'jobs/**'
 
@@ -373,4 +379,51 @@ jobs:
             --name user-service \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --query properties.latestRevisionName -o tsv
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          cd frontend
+          docker build \
+            --build-arg VITE_AUTH_SERVICE_URL=${{ secrets.AUTH_SERVICE_URL }} \
+            --build-arg VITE_BOOK_SERVICE_URL=${{ secrets.BOOK_SERVICE_URL }} \
+            --build-arg VITE_TRANSLATION_SERVICE_URL=${{ secrets.TRANSLATION_SERVICE_URL }} \
+            --build-arg VITE_USER_SERVICE_URL=${{ secrets.USER_SERVICE_URL }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name frontend \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+
+      - name: Deployment successful
+        run: |
+          echo "✅ Frontend deployed successfully"
+          FQDN=$(az containerapp show \
+            --name frontend \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Frontend URL: https://$FQDN"
 
