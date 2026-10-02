@@ -9,7 +9,6 @@ import os
 from database import get_db_connection, close_db_connection
 from firebase_config import initialize_firebase, verify_firebase_token, get_firebase_user
 
-#asdfhjslfkjsakjhkjsafdsdaasdfsadfsafasdfsafssa
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
