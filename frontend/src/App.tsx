@@ -8,7 +8,7 @@ import { StoryGeneratorPage } from './pages/StoryGeneratorPage';
 import { StoryReaderPage } from './pages/StoryReaderPage';
 import { StoryLibraryPage } from './pages/StoryLibraryPage';
 import { VocabularyPage } from './pages/VocabularyPage';
-import { useAuth } from './lib/AuthContext';
+import { useAuth } from './lib/useAuth';
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {

@@ -18,8 +18,8 @@ export const LoginPage: React.FC = () => {
         try {
             await login(email, password);
             navigate('/library');
-        } catch (err: any) {
-            setError(err.message || 'Failed to sign in. Please try again.');
+        } catch (err) {
+            setError(err instanceof Error && err.message ? err.message : 'Failed to sign in. Please try again.');
         } finally {
             setIsLoading(false);
         }

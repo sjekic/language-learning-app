@@ -21,7 +21,7 @@ export const signup = async (email: string, password: string, username?: string)
             email: userCredential.user.email || email,
             displayName: username || userCredential.user.email?.split('@')[0] || 'User'
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error('Signup error:', error);
         throw error;
     }
@@ -36,7 +36,7 @@ export const login = async (email: string, password: string): Promise<AuthUser> 
             email: userCredential.user.email || email,
             displayName: userCredential.user.displayName || userCredential.user.email?.split('@')[0] || 'User'
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error('Login error:', error);
         throw error;
     }

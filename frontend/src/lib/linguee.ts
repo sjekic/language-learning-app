@@ -37,6 +37,11 @@ export interface TranslationResult {
     pos: string; // Part of speech
 }
 
+interface LingueeMatch {
+    pos?: string;
+    translations?: { text: string; pos?: string }[];
+}
+
 // Client-side cache
 const clientCache = new Map<string, TranslationResult[]>();
 
@@ -52,7 +57,7 @@ export const translateWord = async (word: string, sourceLang: string, targetLang
             return clientCache.get(cacheKey)!;
         }
 
-        const response = await axios.get(API_URL, {
+        const response = await axios.get<LingueeMatch[]>(API_URL, {
             params: {
                 query: word,
                 src,
@@ -65,7 +70,7 @@ export const translateWord = async (word: string, sourceLang: string, targetLang
         if (response.data && response.data.length > 0) {
             const firstMatch = response.data[0];
             if (firstMatch.translations) {
-                const results = firstMatch.translations.map((t: any) => ({
+                const results = firstMatch.translations.map((t) => ({
                     text: t.text,
                     pos: t.pos || firstMatch.pos || 'unknown'
                 }));
