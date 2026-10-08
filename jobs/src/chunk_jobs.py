@@ -1,8 +1,9 @@
 import json
 import os
 from openai import OpenAI
-from common.storage import upload_json, download_text
-from azure.storage.blob import BlobServiceClient
+from common.storage import upload_json, download_text, download_json_if_exists
+from common.contracts import validate_chunk, validate_manifest, validate_trigger
+from common.triggers import check_claim
 
 def get_cefr_guidelines(level):
     """Get vocabulary and grammar guidelines for CEFR levels"""
@@ -15,57 +16,23 @@ def get_cefr_guidelines(level):
     }
     return guidelines.get(level, guidelines["B1"])
 
-def get_params_from_trigger():
-    """Read story_id and batch info from trigger blob"""
-    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    blob_service = BlobServiceClient.from_connection_string(connection_string)
-    
-    # List trigger blobs for chunk-job (check both manual and scheduled)
-    container_client = blob_service.get_container_client("stories")
-    blobs = list(container_client.list_blobs(name_starts_with="triggers/chunk-job-scheduled/"))
-    if not blobs:
-        blobs = list(container_client.list_blobs(name_starts_with="triggers/chunk-job/"))
-    
-    if not blobs:
-        print("⏳ No trigger blobs found, waiting...")
-        return None, None, None, None
-    
-    # Process the first trigger blob
-    blob = blobs[0]
-    blob_client = blob_service.get_blob_client(container="stories", blob=blob.name)
-    trigger_data = json.loads(blob_client.download_blob().readall().decode("utf-8"))
-    story_id = trigger_data["story_id"]
-    
-    # Support both old (chunk_id) and new (batch with chapter_start/end) format
-    if "chapter_start" in trigger_data:
-        batch_id = trigger_data.get("batch_id", 1)
-        chapter_start = trigger_data["chapter_start"]
-        chapter_end = trigger_data["chapter_end"]
-    else:
-        # Legacy support: single chunk_id
-        chunk_id = trigger_data["chunk_id"]
-        batch_id = chunk_id
-        chapter_start = chunk_id
-        chapter_end = chunk_id
-    
-    # Delete the trigger blob after reading
-    blob_client.delete_blob()
-    print(f"✅ Read trigger blob: {blob.name}")
-    print(f"   Story ID: {story_id}, Batch ID: {batch_id}, Chapters: {chapter_start}-{chapter_end}")
-    
-    return story_id, batch_id, chapter_start, chapter_end
-
-def main():
-    story_id, batch_id, chapter_start, chapter_end = get_params_from_trigger()
-    
-    if not story_id or not chapter_start or not chapter_end:
-        print("No work to do, exiting...")
-        return
+def main(trigger=None):
+    if trigger is None:
+        from chunk_poller import main as poll
+        return poll()
+    validate_trigger(trigger, "chunk-job")
+    story_id = trigger["story_id"]
+    chapter_start = trigger.get("chapter_start", trigger.get("chunk_id"))
+    chapter_end = trigger.get("chapter_end", trigger.get("chunk_id"))
+    batch_id = trigger.get("batch_id", trigger.get("chunk_id"))
 
     # Download manifest
     manifest_raw = download_text("stories", f"Users/{story_id}/manifest.json")
     manifest = json.loads(manifest_raw)
     
+    chapters = validate_manifest(manifest, story_id)
+    if chapter_end > len(chapters):
+        raise ValueError("Requested chapter range exceeds manifest")
     language = manifest["language"]
     level = manifest["readingLevel"]
     genre = manifest["genre"]
@@ -73,11 +40,19 @@ def main():
     # Initialize OpenAI
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    print(f"🔄 Generating chapters {chapter_start} to {chapter_end} for story {story_id}...")
+    print(f"Generating chapters {chapter_start} to {chapter_end} for story {story_id}...")
     
     # Generate each chapter in the batch
     for chunk_id in range(chapter_start, chapter_end + 1):
-        chapter = manifest["chapters"][chunk_id - 1]  # chunk_id is 1-indexed
+        chapter = chapters[chunk_id - 1]
+        path = f"Users/{story_id}/chunks/chunk_{chunk_id}.json"
+        try:
+            existing = download_json_if_exists("stories", path)
+            validate_chunk(existing, story_id, chunk_id)
+        except ValueError:
+            pass  # A missing/corrupt output can be regenerated on retry.
+        else:
+            continue
         
         # Generate chapter content
         system_prompt = f"""You are a language learning content creator. Write engaging stories in {language} 
@@ -105,6 +80,7 @@ def main():
         
         Write ONLY the story content in {language}, no explanations or translations."""
         
+        check_claim()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -115,7 +91,10 @@ def main():
             max_tokens=1500
         )
         
-        content = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError(f"Chapter {chunk_id} generation returned empty content")
+        content = content.strip()
         
         # Generate chunk
         chunk_content = {
@@ -128,10 +107,11 @@ def main():
         }
 
         # Upload chunk
-        upload_json("stories", f"Users/{story_id}/chunks/chunk_{chunk_id}.json", chunk_content)
-        print(f"   ✅ Chapter {chunk_id} generated: {chapter['title']} ({chunk_content['wordCount']} words)")
+        validate_chunk(chunk_content, story_id, chunk_id)
+        upload_json("stories", path, chunk_content)
+        print(f"Chapter {chunk_id} generated ({chunk_content['wordCount']} words)")
     
-    print(f"✅ Batch {batch_id} complete! Generated chapters {chapter_start}-{chapter_end}")
+    print(f"Batch {batch_id} complete: chapters {chapter_start}-{chapter_end}")
 
 if __name__ == "__main__":
     main()

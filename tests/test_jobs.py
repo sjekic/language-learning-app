@@ -1,259 +1,132 @@
-"""
-Unit tests for jobs module
-"""
-import pytest
-from unittest.mock import Mock, patch, MagicMock, call
-import sys
-import os
+"""Focused job utilities, contracts, storage and lease tests without global SDK mocks."""
+import importlib
 import json
+from unittest.mock import Mock, patch
 
-# Mock Azure imports before importing jobs modules
-sys.modules['azure'] = MagicMock()
-sys.modules['azure.storage'] = MagicMock()
-sys.modules['azure.storage.blob'] = MagicMock()
-sys.modules['azure.storage.blob'].BlobServiceClient = MagicMock()
+import pytest
+from tests import test_job_pipeline as pipeline
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'jobs', 'src'))
 
-from common import utils
-from common import storage
-import chunk_jobs
-import final_assembly_job
-import manifest
-import orchestrator
-
-# Note: Pollers are scripts, so we test them by importing their main function if possible,
-# or by mocking the script execution. Here we will try to direct-import check.
-# Checked files: they have "if __name__ == '__main__': main()", so safe to import.
-import chunk_poller
-import manifest_poller
-import orchestrator_poller
-import final_assembly_poller
+@pytest.fixture
+def job_env():
+    environment = pipeline.JobPipelineTests(methodName="runTest")
+    environment.setUp()
+    try:
+        yield environment
+    finally:
+        environment.doCleanups()
 
 
 class TestUtils:
-    """Tests for common/utils.py"""
-    
-    def test_read_file(self, tmp_path):
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test content")
-        assert utils.read_file(str(test_file)) == "test content"
-    
-    def test_read_file_nonexistent(self, tmp_path):
+    def test_read_file(self, job_env, tmp_path):
+        utils = importlib.import_module("common.utils")
+        path = tmp_path / "test.txt"
+        path.write_text("test content")
+        assert utils.read_file(str(path)) == "test content"
+
+    def test_read_file_nonexistent(self, job_env, tmp_path):
         with pytest.raises(FileNotFoundError):
-            utils.read_file(str(tmp_path / "nonexistent.txt"))
-    
-    def test_write_json(self, tmp_path):
-        test_file = tmp_path / "test.json"
-        test_data = {"key": "value"}
-        utils.write_json(str(test_file), test_data)
-        assert json.loads(test_file.read_text()) == test_data
-    
-    def test_write_text(self, tmp_path):
-        test_file = tmp_path / "test.txt"
-        utils.write_text(str(test_file), "test content")
-        assert test_file.read_text() == "test content"
+            importlib.import_module("common.utils").read_file(str(tmp_path / "missing.txt"))
+
+    def test_write_json(self, job_env, tmp_path):
+        path = tmp_path / "nested" / "test.json"
+        importlib.import_module("common.utils").write_json(str(path), {"key": "value"})
+        assert json.loads(path.read_text()) == {"key": "value"}
+
+    def test_write_text(self, job_env, tmp_path):
+        path = tmp_path / "nested" / "test.txt"
+        importlib.import_module("common.utils").write_text(str(path), "test content")
+        assert path.read_text() == "test content"
 
 
 class TestStorage:
-    """Tests for common/storage.py"""
-    
-    def test_upload_text(self):
-        mock_blob_client = Mock()
-        with patch('common.storage.blob') as mock_blob_service:
-            mock_blob_service.get_blob_client.return_value = mock_blob_client
-            storage.upload_text("container", "blob", "content")
-            mock_blob_client.upload_blob.assert_called_once()
-    
-    def test_download_text(self):
-        mock_blob_client = Mock()
-        mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = "content"
-        with patch('common.storage.blob') as mock_blob_service:
-            mock_blob_service.get_blob_client.return_value = mock_blob_client
-            assert storage.download_text("container", "blob") == "content"
+    def test_upload_and_download_text(self, job_env):
+        storage = importlib.import_module("common.storage")
+        storage.upload_text("stories", "text.txt", "hello")
+        assert storage.download_text("stories", "text.txt") == "hello"
+
+    def test_optional_json_only_treats_not_found_as_absent(self, job_env):
+        storage = importlib.import_module("common.storage")
+        assert storage.download_json_if_exists("stories", "missing.json") is None
+        with patch.object(storage, "download_text", side_effect=pipeline.StorageError("access denied", 403)):
+            with pytest.raises(pipeline.StorageError):
+                storage.download_json_if_exists("stories", "missing.json")
+
+    def test_invalid_json_is_not_treated_as_absent(self, job_env):
+        job_env.storage.data["invalid.json"] = b"not json"
+        with pytest.raises(ValueError):
+            importlib.import_module("common.storage").download_json_if_exists("stories", "invalid.json")
 
 
-class TestChunkJobs:
-    """Tests for chunk_jobs.py"""
-    
-    def test_get_cefr_guidelines(self):
-        # The guidelines return strings, just check for non-empty result
-        # and different results for different levels if applicable
-        g1 = chunk_jobs.get_cefr_guidelines("A1")
-        assert isinstance(g1, str)
-        assert len(g1) > 0
+class TestContracts:
+    @pytest.mark.parametrize("payload", [None, [], {}, {"story_id": "../other"}, {"story_id": ""}])
+    def test_invalid_story_identity(self, job_env, payload):
+        with pytest.raises(ValueError):
+            importlib.import_module("common.contracts").validate_trigger(payload, "manifest-job")
 
-    def test_get_params_from_trigger(self):
-        # Test get_params_from_trigger independently
-        mock_blob = Mock()
-        mock_blob.name = "trigger"
-        mock_blob_client = Mock()
-        # Mock legacy trigger format for simplicity, or full format
-        mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = json.dumps({"story_id": "s1", "chunk_id": 1}).encode()
-        
-        with patch('chunk_jobs.BlobServiceClient') as mock_service:
-            mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-            mock_service.from_connection_string.return_value.get_blob_client.return_value = mock_blob_client
-            with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-                s_id, b_id, c_start, c_end = chunk_jobs.get_params_from_trigger()
-                assert s_id == "s1"
-                assert b_id == 1
-                assert c_start == 1
-                assert c_end == 1
+    @pytest.mark.parametrize("value", [0, -1, True, "1", 1.5, None])
+    def test_chapter_identity_requires_positive_integer(self, job_env, value):
+        with pytest.raises(ValueError):
+            importlib.import_module("common.contracts").validate_trigger(
+                {"story_id": "s1", "chunk_id": value}, "chunk-job")
 
-    def test_main(self):
-        with patch('chunk_jobs.get_params_from_trigger', return_value=("story_id", 1, 1, 1)):
-            with patch('chunk_jobs.download_text', side_effect=[
-                json.dumps({"storyId": "s1", "readingLevel": "A1", "genre": "g", "language": "l", "title": "Test Title", "chapters": [{"title": "c1", "summary": "s1"}]}), # manifest
-                json.dumps({"characters": []}) # story_bible
-            ]):
-                with patch('chunk_jobs.upload_json') as mock_upload:
-                    with patch('chunk_jobs.OpenAI') as mock_openai:
-                        mock_openai.return_value.chat.completions.create.return_value.choices = [Mock(message=Mock(content="Generated"))]
-                        chunk_jobs.main()
-                        assert mock_upload.called
+    @pytest.mark.parametrize("chapters", [[], [{"chapterNumber": 2, "title": "T", "summary": "S"}],
+        [{"chapterNumber": 1, "title": " ", "summary": "S"}],
+        [{"chapterNumber": True, "title": "T", "summary": "S"}]])
+    def test_manifest_must_define_ordered_real_chapters(self, job_env, chapters):
+        with pytest.raises(ValueError):
+            importlib.import_module("common.contracts").validate_manifest(
+                {"storyId": "s1", "chapters": chapters}, "s1")
 
-class TestFinalAssemblyJob:
-    """Tests for final_assembly_job.py"""
-    
-    def test_main(self):
-        with patch('final_assembly_job.get_story_id_from_trigger', return_value="s1"):
-            with patch('final_assembly_job.download_text', side_effect=[
-                json.dumps({"storyId": "s1", "chapters": [{"chunkId": 1}]}), # manifest
-                json.dumps({"title": "t", "coverUrl": "u"}), # cover
-                json.dumps({"chunkId": 1, "content": "c"}) # chunk
-            ]):
-                with patch('final_assembly_job.upload_json') as mock_upload:
-                    final_assembly_job.main()
-                    mock_upload.assert_called_once()
+    def test_cefr_guidelines(self, job_env):
+        worker = job_env.modules["chunk_jobs"]
+        assert worker.get_cefr_guidelines("A1")
+        assert worker.get_cefr_guidelines("A1") != worker.get_cefr_guidelines("C1")
+        assert worker.get_cefr_guidelines("unknown") == worker.get_cefr_guidelines("B1")
 
 
-class TestManifest:
-    """Tests for manifest.py"""
-    
-    def test_main(self):
-        with patch('manifest.get_story_id_from_trigger', return_value="s1"):
-            with patch('manifest.download_text', return_value=json.dumps({"userPrompt": "p", "language": "l", "genre": "g", "readingLevel": "l"})):
-                with patch('manifest.upload_json') as mock_upload:
-                    with patch('manifest.BlobServiceClient') as mock_blob:
-                        with patch('manifest.OpenAI') as mock_openai:
-                            mock_openai.return_value.chat.completions.create.return_value.choices = [Mock(message=Mock(content=json.dumps({"title": "t", "chapters": []})))]
-                            manifest.main()
-                            assert mock_upload.called
+class TestLease:
+    def test_renewal_keeps_long_work_claimed(self, job_env):
+        path = job_env.trigger("chunk-job", chunk_id=1)
+        lease = importlib.import_module("common.triggers").TriggerLease(job_env.storage.get_blob_client(blob=path))
+        with patch.object(lease.stop, "wait", side_effect=[False, False, True]):
+            lease._renew()
+        assert lease.lease.renewals == 2
+        lease.check()
+        lease.lease.release()
 
+    def test_failed_renewal_is_reported(self, job_env):
+        path = job_env.trigger("chunk-job", chunk_id=1)
+        lease = importlib.import_module("common.triggers").TriggerLease(job_env.storage.get_blob_client(blob=path))
+        with patch.object(lease.stop, "wait", return_value=False):
+            with patch.object(lease.lease, "renew", side_effect=pipeline.StorageError("lost lease", 412)):
+                lease._renew()
+        with pytest.raises(RuntimeError, match="Lost trigger lease"):
+            lease.check()
+        lease.lease.release()
 
-class TestOrchestrator:
-    """Tests for orchestrator.py"""
-    
-    def test_get_params_from_trigger(self):
-        mock_blob = Mock()
-        mock_blob.name = "trigger"
-        # Mock payload: expected_chunks=10
-        mock_blob_client = Mock()
-        mock_blob_client.download_blob.return_value.readall.return_value.decode.return_value = json.dumps({"story_id": "s1", "expected_chunks": 5})
-        
-        with patch('orchestrator.BlobServiceClient') as mock_service:
-            mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-            mock_service.from_connection_string.return_value.get_blob_client.return_value = mock_blob_client
-            
-            with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-                story_id, chunks = orchestrator.get_params_from_trigger()
-                assert story_id == "s1"
-                assert chunks == 5
-    
-    def test_main_success(self):
-        # Test full flow where chunks are ready
-        with patch('orchestrator.get_params_from_trigger', return_value=("s1", 1)):
-            with patch('orchestrator.list_blobs', return_value=["Users/s1/chunks/chunk_1.json"]):
-                with patch('orchestrator.BlobServiceClient') as mock_service:
-                    with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-                        orchestrator.main()
-                        # Should have created final assembly trigger
-                        mock_service.from_connection_string.return_value.get_blob_client.return_value.upload_blob.assert_called()
+    def test_missing_configuration_fails_explicitly(self, job_env, monkeypatch):
+        monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING")
+        with pytest.raises(RuntimeError, match="not set"):
+            job_env.modules["chunk_poller"].main()
 
-    def test_main_timeout(self):
-        with patch('orchestrator.get_params_from_trigger', return_value=("s1", 1)):
-            with patch('orchestrator.list_blobs', return_value=[]):
-                with patch('time.sleep'): # Skip sleep
-                    with patch('orchestrator.BlobServiceClient'):
-                        orchestrator.main() 
+    @pytest.mark.parametrize("name", ["manifest_poller", "chunk_poller", "orchestrator_poller", "final_assembly_poller"])
+    def test_no_triggers_is_successful_noop(self, job_env, name):
+        assert job_env.modules[name].main() == 0
 
+    def test_enqueue_uses_stable_name_without_overwriting_an_existing_claim(self, job_env):
+        triggers = importlib.import_module("common.triggers")
+        triggers.enqueue("chunk-job", "story_a", "batch", chunk_id=1)
+        path = "triggers/chunk-job-scheduled/batch.json"
+        lease = job_env.storage.get_blob_client(blob=path).acquire_lease()
+        original = job_env.storage.data[path]
+        triggers.enqueue("chunk-job", "story_a", "batch", chunk_id=1)
+        assert job_env.storage.data[path] == original
+        assert job_env.storage.leases[path] is lease
+        lease.release()
 
-class TestPollers:
-    """Tests for poller scripts"""
-    
-    def test_chunk_poller(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn", "JOB_COMPLETION_INDEX": "0"}):
-            mock_blob = Mock()
-            mock_blob.name = "trigger1"
-            mock_blob_client = Mock()
-            mock_blob_client.download_blob.return_value.readall.return_value = json.dumps({"story_id": "s1", "chunk_id": 1, "trigger_id": "t1"}).encode()
-            
-            with patch('chunk_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-                mock_service.from_connection_string.return_value.get_container_client.return_value.get_blob_client.return_value = mock_blob_client
-                
-                with patch('chunk_jobs.main') as mock_job_main:
-                    with patch('sys.exit'): # Mock sys.exit to prevent abort
-                        chunk_poller.main()
-                        mock_job_main.assert_called_once()
-    
-    def test_chunk_poller_no_triggers(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-            with patch('chunk_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = []
-                with patch('sys.exit') as mock_exit:
-                    chunk_poller.main()
-                    mock_exit.assert_called_with(0)
-
-    def test_manifest_poller(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-            mock_blob = Mock()
-            mock_blob.name = "trigger1"
-            mock_blob_client = Mock()
-            mock_blob_client.download_blob.return_value.readall.return_value = json.dumps({"story_id": "s1", "trigger_id": "t1"}).encode()
-            
-            with patch('manifest_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-                mock_service.from_connection_string.return_value.get_container_client.return_value.get_blob_client.return_value = mock_blob_client
-                
-                with patch('manifest.main') as mock_job_main:
-                    with patch('sys.exit'):
-                        manifest_poller.main() 
-                        mock_job_main.assert_called_once()
-
-    def test_manifest_poller_no_triggers(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-            with patch('manifest_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = []
-                with patch('sys.exit') as mock_exit:
-                    manifest_poller.main()
-                    mock_exit.assert_called_with(0)
-
-    def test_final_assembly_poller(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-            mock_blob = Mock()
-            mock_blob.name = "trigger1"
-            mock_blob_client = Mock()
-            mock_blob_client.download_blob.return_value.readall.return_value = json.dumps({"story_id": "s1", "trigger_id": "t1"}).encode()
-            
-            with patch('final_assembly_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-                mock_service.from_connection_string.return_value.get_container_client.return_value.get_blob_client.return_value = mock_blob_client
-                with patch('final_assembly_job.main'):
-                    with patch('sys.exit'):
-                         final_assembly_poller.main()
-
-    def test_orchestrator_poller(self):
-        with patch.dict(os.environ, {"AZURE_STORAGE_CONNECTION_STRING": "conn"}):
-            mock_blob = Mock()
-            mock_blob.name = "trigger1"
-            mock_blob_client = Mock()
-            mock_blob_client.download_blob.return_value.readall.return_value = json.dumps({"story_id": "s1", "trigger_id": "t1"}).encode()
-            
-            with patch('orchestrator_poller.BlobServiceClient') as mock_service:
-                mock_service.from_connection_string.return_value.get_container_client.return_value.list_blobs.return_value = [mock_blob]
-                mock_service.from_connection_string.return_value.get_container_client.return_value.get_blob_client.return_value = mock_blob_client
-                with patch('orchestrator.main'):
-                    with patch('sys.exit'):
-                         orchestrator_poller.main()
+    def test_conflicting_dispatch_is_not_acknowledged_as_success(self, job_env):
+        triggers = importlib.import_module("common.triggers")
+        triggers.enqueue("chunk-job", "story_a", "batch", chunk_id=1)
+        with pytest.raises(ValueError, match="Conflicting"):
+            triggers.enqueue("chunk-job", "story_a", "batch", chunk_id=2)

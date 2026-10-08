@@ -1,80 +1,11 @@
-#!/usr/bin/env python3
-"""
-Manifest Job Poller - Checks for trigger blobs and processes them
-"""
-import os
-import sys
-import time
-import json
-from azure.storage.blob import BlobServiceClient
+"""Consume manifest-job triggers with one acknowledgement owner."""
+from common.triggers import run_pending
+
 
 def main():
-    """Poll for manifest trigger blobs and process them"""
-    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    if not connection_string:
-        print("❌ AZURE_STORAGE_CONNECTION_STRING not set")
-        sys.exit(0)  # Exit gracefully for scheduled jobs
-    
-    blob_service = BlobServiceClient.from_connection_string(connection_string)
-    container_client = blob_service.get_container_client("stories")
-    
-    # Look for trigger blobs in the manifest-job-scheduled folder
-    trigger_prefix = "triggers/manifest-job-scheduled/"
-    
-    print(f"🔍 Checking for manifest job triggers in {trigger_prefix}...")
-    
-    try:
-        blobs = list(container_client.list_blobs(name_starts_with=trigger_prefix))
-        
-        if not blobs:
-            print("   └─ No triggers found. Exiting.")
-            sys.exit(0)
-        
-        print(f"   └─ Found {len(blobs)} trigger(s)")
-        
-        # Process each trigger blob
-        for blob in blobs:
-            try:
-                print(f"\n📥 Processing trigger: {blob.name}")
-                
-                # Download trigger data
-                blob_client = container_client.get_blob_client(blob.name)
-                trigger_data = json.loads(blob_client.download_blob().readall())
-                
-                story_id = trigger_data.get("story_id")
-                trigger_id = trigger_data.get("trigger_id")
-                
-                if not story_id or not trigger_id:
-                    print(f"   ❌ Invalid trigger data: {trigger_data}")
-                    continue
-                
-                print(f"   └─ Story ID: {story_id}")
-                print(f"   └─ Trigger ID: {trigger_id}")
-                
-                # Set environment variable for manifest script
-                os.environ["STORY_ID"] = story_id
-                os.environ["TRIGGER_ID"] = trigger_id
-                
-                # Import and run manifest job
-                print(f"\n🚀 Running manifest job for story {story_id}...")
-                import manifest
-                manifest.main()
-                
-                # Delete trigger blob after successful processing
-                blob_client.delete_blob()
-                print(f"✅ Deleted trigger blob: {blob.name}")
-                
-            except Exception as e:
-                print(f"❌ Error processing trigger {blob.name}: {e}")
-                # Don't delete the trigger on error - it will be retried
-                continue
-        
-        print(f"\n✅ Processed all triggers")
-        
-    except Exception as e:
-        print(f"❌ Error listing triggers: {e}")
-        sys.exit(1)
+    import manifest
+    return run_pending("manifest-job", manifest.main)
+
 
 if __name__ == "__main__":
     main()
-
