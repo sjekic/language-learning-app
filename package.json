@@ -1,14 +1,16 @@
 {
     "name": "language-learning-app",
     "version": "1.0.0",
-    "description": "Language learning app with frontend and backend",
+    "description": "Language learning app with a React frontend and FastAPI services",
     "scripts": {
-        "dev": "concurrently \"npm run dev --prefix frontend\" \"npm start --prefix backend\"",
-        "dev:fullstack": "bash scripts/dev-fullstack.sh",
-        "server": "cd backend && node server.js",
-        "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install"
-    },
-    "devDependencies": {
-        "concurrently": "^8.2.2"
+        "dev": "npm run services:up && npm run dev:frontend",
+        "dev:fullstack": "npm run dev",
+        "dev:frontend": "npm --prefix frontend run dev",
+        "services:check": "node scripts/docker-preflight.cjs",
+        "services:up": "npm run services:check && docker compose up --build --wait --wait-timeout 120",
+        "services:down": "docker compose down",
+        "services:logs": "docker compose logs -f",
+        "install-all": "npm ci && npm --prefix frontend ci",
+        "test:startup": "node --test scripts/docker-preflight.test.cjs"
     }
 }

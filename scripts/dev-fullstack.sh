@@ -107,11 +107,8 @@ start_uvicorn() {
 
 start_uvicorn "auth-service" "services/auth-service" "$AUTH_SERVICE_PORT"
 start_uvicorn "user-service" "services/user-service" "$USER_SERVICE_PORT"
-(
-  # Book service can run in DEV_MODE without Azure SDK / Blob deps.
-  export DEV_MODE="${DEV_MODE:-true}"
-  start_uvicorn "book-service" "services/book-service" "$BOOK_SERVICE_PORT"
-)
+# Keep the book-service PID in the parent shell so cleanup can stop it.
+DEV_MODE="${DEV_MODE:-true}" start_uvicorn "book-service" "services/book-service" "$BOOK_SERVICE_PORT"
 start_uvicorn "translation-service" "services/translation-service" "$TRANSLATION_SERVICE_PORT"
 
 echo ""
@@ -123,6 +120,6 @@ echo "  VITE_TRANSLATION_SERVICE_URL=$VITE_TRANSLATION_SERVICE_URL"
 echo ""
 
 cd "$ROOT_DIR/frontend"
-exec npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"
+npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"
 
 
