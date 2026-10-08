@@ -182,7 +182,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest --cov=jobs/src tests/test_jobs.py
+          pytest --cov=jobs/src tests/test_jobs.py tests/test_job_pipeline.py
 
   deploy-auth-service:
     name: Deploy Auth Service
